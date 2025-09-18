@@ -15,7 +15,7 @@
 from oxia.connection_pool import ConnectionPool
 from oxia.service_discovery import ServiceDiscovery
 from oxia.notifications import Notifications
-from oxia.proto import client_pb2 as pb
+import oxia.proto.io.streamnative.oxia.proto as pb
 import datetime
 from enum import IntEnum
 
@@ -39,8 +39,8 @@ def _get_version(pbv : pb.Version):
     v._modifications_count = pbv.modifications_count
     v._created_timestamp = datetime.datetime.fromtimestamp(pbv.created_timestamp/1000.0)
     v._modified_timestamp = datetime.datetime.fromtimestamp(pbv.modified_timestamp/1000.0)
-    v._session_id = pbv.session_id if pbv.HasField('session_id') else None
-    v.client_identity = pbv.client_identity if pbv.HasField('client_identity') else None
+    v._session_id = pbv.session_id
+    v._client_identity = pbv.client_identity
     return v
 
 class ComparisonType(IntEnum):
@@ -193,7 +193,7 @@ class Client:
             pr.session_id = session.session_id()
             pr.client_identity = session.client_identifier()
 
-        res = stub.Write(pb.WriteRequest(shard=shard, puts=[pr]))
+        res = stub.write(pb.WriteRequest(shard=shard, puts=[pr]))
 
         put_res = res.puts[0]  # We only have 1 request
         _check_status(put_res.status)
@@ -215,7 +215,7 @@ class Client:
 
         dr = pb.DeleteRequest(key=key,
                               expected_version_id=expected_version_id)
-        res = stub.Write(pb.WriteRequest(shard=shard, deletes=[dr]))
+        res = stub.write(pb.WriteRequest(shard=shard, deletes=[dr]))
 
         status = res.deletes[0].status # We only have 1 request
         if status == pb.Status.KEY_NOT_FOUND:
@@ -240,7 +240,7 @@ class Client:
     def _delete_range_single_shard(min_key_inclusive: str, max_key_exclusive: str, shard: int, stub):
         dr = pb.DeleteRangeRequest(start_inclusive=min_key_inclusive,
                               end_exclusive=max_key_exclusive)
-        res = stub.Write(pb.WriteRequest(shard=shard, delete_ranges=[dr]))
+        res = stub.write(pb.WriteRequest(shard=shard, delete_ranges=[dr]))
 
         status = res.delete_ranges[0].status  # We only have 1 request
         _check_status(status)
@@ -275,13 +275,11 @@ class Client:
                            comparison_type=comparison_type,
                            include_value=include_value,
                            secondary_index_name=use_index)
-        stream = stub.Read(pb.ReadRequest(shard=shard, gets=[gr]))
-        res = stream.next()
-        stream.cancel()
+        res = next(stub.read(pb.ReadRequest(shard=shard, gets=[gr])))
         get_res = res.gets[0] # We only have 1 request
         _check_status(get_res.status)
 
-        res_key = get_res.key if len(get_res.key) > 0 else key
+        res_key = get_res.key if get_res.key is not None else key
         return res_key, get_res.value, _get_version(get_res.version)
 
     def list(self, min_key_inclusive: str, max_key_exclusive: str,
@@ -304,10 +302,10 @@ class Client:
 
     @staticmethod
     def _list_single_shard(shard, stub, min_key_inclusive: str, max_key_exclusive: str, use_index: str) -> list:
-        res = stub.List(pb.ListRequest(shard=shard,
-                                 start_inclusive=min_key_inclusive,
-                                 end_exclusive=max_key_exclusive,
-                                 secondary_index_name=use_index))
+        res = stub.list(pb.ListRequest(shard=shard,
+                                       start_inclusive=min_key_inclusive,
+                                       end_exclusive=max_key_exclusive,
+                                       secondary_index_name=use_index))
 
         keys = []
         for i in res:

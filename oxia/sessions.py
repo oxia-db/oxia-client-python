@@ -13,9 +13,8 @@
 # limitations under the License.
 
 import threading, uuid
-from service_discovery import ServiceDiscovery
-from oxia.proto.client_pb2 import ShardAssignmentsRequest, Int32HashRange, ShardKeyRouter, CreateSessionRequest, \
-        CloseSessionRequest
+from oxia.service_discovery import ServiceDiscovery
+import oxia.proto.io.streamnative.oxia.proto as pb
 
 
 class Session:
@@ -24,7 +23,7 @@ class Session:
         self._shard = shard
         self._client_identifier = client_identifier
         self._service_discovery = service_discovery
-        res = service_discovery.get_stub(shard).CreateSession(CreateSessionRequest(
+        res = service_discovery.get_stub(shard).create_session(pb.CreateSessionRequest(
             shard=shard,
             session_timeout_ms=session_timeout_ms,
             client_identity=client_identifier,
@@ -41,7 +40,7 @@ class Session:
         return self._client_identifier
 
     def close(self):
-        self._service_discovery.get_stub(self._shard).CloseSession(CloseSessionRequest(
+        self._service_discovery.get_stub(self._shard).close_session(pb.CloseSessionRequest(
             shard=self._shard,
             session_id=self._session_id,
         ))

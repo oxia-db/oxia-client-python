@@ -12,11 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from service_discovery import ServiceDiscovery
-from backoff import Backoff
+from oxia.service_discovery import ServiceDiscovery
+from oxia.backoff import Backoff
 import threading, queue, logging
-import oxia.proto.client_pb2 as pb
-from api import Notification, NotificationType
+import oxia.proto.io.streamnative.oxia.proto as pb
+from oxia.api import Notification, NotificationType
 
 class Notifications:
     def __init__(self, service_discovery : ServiceDiscovery):
@@ -55,7 +55,7 @@ class Notifications:
                 self._lock.release()
 
                 for shard, stub in all_shards:
-                    stream = stub.GetNotifications(pb.NotificationsRequest(
+                    stream = stub.get_notifications(pb.NotificationsRequest(
                         shard=shard,
                         start_offset_exclusive=self._last_notification.get(shard)
                     ))
@@ -89,7 +89,7 @@ class Notifications:
                     notification = Notification()
                     notification._key = k
                     notification._type = NotificationType(n.type)
-                    notification._version_id = n.version_id
+                    notification._version_id = n.version_id if n.version_id else 0
                     notification._key_range_end = n.key_range_last
                     self._notifications.put(notification)
 

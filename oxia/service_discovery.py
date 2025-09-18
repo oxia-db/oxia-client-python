@@ -12,16 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from oxia.proto.client_pb2 import ShardAssignmentsRequest, Int32HashRange, ShardKeyRouter
-from oxia.proto.client_pb2_grpc import OxiaClientStub
-
-from backoff import  Backoff
+import oxia.proto.io.streamnative.oxia.proto as pb
+from oxia.backoff import Backoff
 
 import threading
 import xxhash
 
 class HashRange:
-    def __init__(self, r: Int32HashRange):
+    def __init__(self, r: pb.Int32HashRange):
         self.min_included = r.min_hash_inclusive
         self.max_included = r.max_hash_inclusive
 
@@ -66,7 +64,7 @@ class ServiceDiscovery(object):
 
         while not self._closed:
             try:
-                for sa in stub.GetShardAssignments(ShardAssignmentsRequest(namespace=self._namespace)):
+                for sa in stub.get_shard_assignments(pb.ShardAssignmentsRequest(namespace=self._namespace)):
                     self._parse_assignments(sa.namespaces[self._namespace])
                     self._init_barrier.wait()
                     backoff.reset()
@@ -76,7 +74,7 @@ class ServiceDiscovery(object):
                     backoff.wait_next()
 
     def _parse_assignments(self, assignments):
-        if assignments.shard_key_router != ShardKeyRouter.XXHASH3:
+        if assignments.shard_key_router != pb.ShardKeyRouter.XXHASH3:
             raise Exception('Invalid ShardKeyRouter')
 
         self._lock.acquire()
@@ -99,7 +97,7 @@ class ServiceDiscovery(object):
                     return s
         raise Exception(f'No shard found for key {key}')
 
-    def get_stub(self, shard: int) -> OxiaClientStub:
+    def get_stub(self, shard: int) -> pb.OxiaClientStub:
         with self._lock:
             for s in self._assignments.values():
                 if s.shard == shard:

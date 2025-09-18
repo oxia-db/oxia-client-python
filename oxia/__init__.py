@@ -13,4 +13,4 @@
 # limitations under the License.
 
 from oxia.client import *
-from api import *
+from oxia.api import *
