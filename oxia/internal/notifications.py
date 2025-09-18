@@ -12,8 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from oxia.service_discovery import ServiceDiscovery
-from oxia.backoff import Backoff
+from oxia.internal.service_discovery import ServiceDiscovery
+from oxia.internal.backoff import Backoff
 import threading, queue, logging
 import oxia.proto.io.streamnative.oxia.proto as pb
 from oxia.api import Notification, NotificationType

@@ -12,15 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from oxia.connection_pool import ConnectionPool
-from oxia.service_discovery import ServiceDiscovery
-from oxia.notifications import Notifications
+from oxia.internal.connection_pool import ConnectionPool
+from oxia.internal.notifications import Notifications
+from oxia.internal.sessions import SessionManager
+from oxia.internal.service_discovery import ServiceDiscovery
 import oxia.proto.io.streamnative.oxia.proto as pb
+
 import datetime
 from enum import IntEnum
-
-from oxia.sessions import SessionManager
-
 
 def _check_status(status: pb.Status):
     if status == pb.Status.OK:

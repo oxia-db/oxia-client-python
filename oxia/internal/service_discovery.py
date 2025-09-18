@@ -13,7 +13,7 @@
 # limitations under the License.
 
 import oxia.proto.io.streamnative.oxia.proto as pb
-from oxia.backoff import Backoff
+from oxia.internal.backoff import Backoff
 
 import threading
 import xxhash

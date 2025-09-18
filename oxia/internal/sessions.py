@@ -13,7 +13,7 @@
 # limitations under the License.
 
 import threading, uuid
-from oxia.service_discovery import ServiceDiscovery
+from oxia.internal.service_discovery import ServiceDiscovery
 import oxia.proto.io.streamnative.oxia.proto as pb
 
 

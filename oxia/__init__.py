@@ -12,5 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from oxia.client import *
-from oxia.api import *
+from oxia.client import (ComparisonType,
+                         Client,
+                         Version,
+                         OxiaException,
+                         KeyNotFound,
+                         UnexpectedVersionId,
+                         SessionNotFound,
+                         EXPECTED_RECORD_DOES_NOT_EXIST,
+                         )
+from oxia.api import NotificationType, Notification
