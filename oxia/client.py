@@ -11,7 +11,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import functools
 
+from oxia.internal.compare import compare_tuple_with_slash
 from oxia.internal.connection_pool import ConnectionPool
 from oxia.internal.notifications import Notifications
 from oxia.internal.sessions import SessionManager
@@ -257,8 +259,25 @@ class Client:
         if partition_key is None and \
                 (comparison_type != ComparisonType.EQUAL
                      or use_index is not None):
-            # internalGetMultiShards(key, options, result);
-            pass
+
+            results = []
+            for shard, stub in self.service_discovery.get_all_shards():
+                try:
+                    k, val, version =  self._get_single_shard(shard, stub, key, comparison_type, include_value, use_index)
+                    results.append((k, val, version))
+                except KeyNotFound:
+                    pass
+            if not results: raise KeyNotFound
+            results.sort(key=functools.cmp_to_key(compare_tuple_with_slash))
+
+            if comparison_type == ComparisonType.EQUAL or \
+                comparison_type == ComparisonType.CEILING or \
+                comparison_type == ComparisonType.HIGHER:
+                return results[0]
+            elif comparison_type == ComparisonType.FLOOR or \
+                    comparison_type == ComparisonType.LOWER:
+                return results[-1]
+
         else:
             # Single shard get operation
             shard, stub = self.service_discovery.get_leader(key, partition_key)

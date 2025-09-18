@@ -186,27 +186,284 @@ class OxiaClientTestCase(unittest.TestCase):
         self.assertTrue(v1.is_ephemeral())
         self.assertEqual('client-1', v1.client_identity())
 
-        # # Override with non-ephemeral value
-        # _, v2 = client.put(kx, 'y', ephemeral=False)
-        # self.assertFalse(v2.is_ephemeral())
-        # self.assertEqual(1, v2.modifications_count())
-        # vx = v2.version_id()
+        client2 = oxia.Client(self.service_address,
+                              client_identifier="client-2")
+
+        kr2, va2, vr2 = client2.get(k)
+        self.assertEqual(0, vr2.modifications_count())
+        self.assertEqual(va2, b'x')
+        self.assertTrue(vr2.is_ephemeral())
+        self.assertEqual('client-1', vr2.client_identity())
+
+        # Override
+        k2, v2 = client2.put(k, 'v2', ephemeral=True)
+        self.assertTrue(v2.is_ephemeral())
+        self.assertEqual('client-2', v2.client_identity())
 
         client.close()
+        client2.close()
 
-        # # Re-open
-        # client2 = oxia.Client(self.service_address)
+    def test_sessions_notifications(self):
+        client1 = oxia.Client(self.service_address,
+                             client_identifier="client-1")
+
+        client2 = oxia.Client(self.service_address,
+                              client_identifier="client-2")
+
+        notifications2 = client2.get_notifications()
+
+        k = new_key()
+        k1, v1 = client1.put(k, 'x', ephemeral=True)
+
+        client2 = oxia.Client(self.service_address,
+                              client_identifier="client-2")
+
+        n1 = next(notifications2)
+        self.assertIs(oxia.NotificationType.KEY_CREATED, n1.notification_type())
+        self.assertEqual(k, n1.key())
+        self.assertEqual(v1.version_id(), n1.version_id())
+
+        client1.close()
+
+        n2 = next(notifications2)
+        self.assertIs(oxia.NotificationType.KEY_DELETED, n2.notification_type())
+        self.assertEqual(k, n2.key())
+
+        client2.close()
+
+    def test_floor_ceiling_get(self):
+        client = oxia.Client(self.service_address)
+        k = new_key()
+        client.put(k + "/a", '0')
+        # client.put(k + "/b", '1') # Skipped intentionally
+        client.put(k + "/c", '2')
+        client.put(k + "/d", '3')
+        client.put(k + "/e", '4')
+        # client.put(k + "/f", '5') # Skipped intentionally
+        client.put(k + "/g", '6')
+
+        key, val, _ = client.get(k + '/a')
+        self.assertEqual(k + '/a', key)
+        self.assertEqual(b'0', val)
+
+        key, val, _ = client.get(k + '/a', comparison_type=oxia.ComparisonType.EQUAL)
+        self.assertEqual(k + '/a', key)
+        self.assertEqual(b'0', val)
+
+        key, val, _ = client.get(k + '/a', comparison_type=oxia.ComparisonType.FLOOR)
+        self.assertEqual(k + '/a', key)
+        self.assertEqual(b'0', val)
+
+        key, val, _ = client.get(k + '/a', comparison_type=oxia.ComparisonType.CEILING)
+        self.assertEqual(k + '/a', key)
+        self.assertEqual(b'0', val)
+
+        key, _, _ = client.get(k + '/a', comparison_type=oxia.ComparisonType.LOWER)
+        self.assertFalse(key.startswith(k)) # Not found
+
+        key, val, _ = client.get(k + '/a', comparison_type=oxia.ComparisonType.HIGHER)
+        self.assertEqual(k + '/c', key)
+        self.assertEqual(b'2', val)
+
+        # ---------------------------------------------------------------
+
+        with self.assertRaises(oxia.KeyNotFound):
+            client.get(k + '/b')
+
+        with self.assertRaises(oxia.KeyNotFound):
+            client.get(k + '/b', comparison_type=oxia.ComparisonType.EQUAL)
+
+        key, val, _ = client.get(k + '/b', comparison_type=oxia.ComparisonType.FLOOR)
+        self.assertEqual(k + '/a', key)
+        self.assertEqual(b'0', val)
+
+        key, val, _ = client.get(k + '/b', comparison_type=oxia.ComparisonType.CEILING)
+        self.assertEqual(k + '/c', key)
+        self.assertEqual(b'2', val)
+
+        key, val, _ = client.get(k + '/b', comparison_type=oxia.ComparisonType.LOWER)
+        self.assertEqual(k + '/a', key)
+        self.assertEqual(b'0', val)
+
+        key, val, _ = client.get(k + '/b', comparison_type=oxia.ComparisonType.HIGHER)
+        self.assertEqual(k + '/c', key)
+        self.assertEqual(b'2', val)
+
+        # ---------------------------------------------------------------
+
+        key, val, _ = client.get(k + '/c')
+        self.assertEqual(k + '/c', key)
+        self.assertEqual(b'2', val)
+
+        key, val, _ = client.get(k + '/c', comparison_type=oxia.ComparisonType.EQUAL)
+        self.assertEqual(k + '/c', key)
+        self.assertEqual(b'2', val)
+
+        key, val, _ = client.get(k + '/c', comparison_type=oxia.ComparisonType.FLOOR)
+        self.assertEqual(k + '/c', key)
+        self.assertEqual(b'2', val)
+
+        key, val, _ = client.get(k + '/c', comparison_type=oxia.ComparisonType.CEILING)
+        self.assertEqual(k + '/c', key)
+        self.assertEqual(b'2', val)
+
+        key, val, _ = client.get(k + '/c', comparison_type=oxia.ComparisonType.LOWER)
+        self.assertEqual(k + '/a', key)
+        self.assertEqual(b'0', val)
+
+        key, val, _ = client.get(k + '/c', comparison_type=oxia.ComparisonType.HIGHER)
+        self.assertEqual(k + '/d', key)
+        self.assertEqual(b'3', val)
+
+        # ---------------------------------------------------------------
+
+        key, val, _ = client.get(k + '/d')
+        self.assertEqual(k + '/d', key)
+        self.assertEqual(b'3', val)
+
+        key, val, _ = client.get(k + '/d', comparison_type=oxia.ComparisonType.EQUAL)
+        self.assertEqual(k + '/d', key)
+        self.assertEqual(b'3', val)
+
+        key, val, _ = client.get(k + '/d', comparison_type=oxia.ComparisonType.FLOOR)
+        self.assertEqual(k + '/d', key)
+        self.assertEqual(b'3', val)
+
+        key, val, _ = client.get(k + '/d', comparison_type=oxia.ComparisonType.CEILING)
+        self.assertEqual(k + '/d', key)
+        self.assertEqual(b'3', val)
+
+        key, val, _ = client.get(k + '/d', comparison_type=oxia.ComparisonType.LOWER)
+        self.assertEqual(k + '/c', key)
+        self.assertEqual(b'2', val)
+
+        key, val, _ = client.get(k + '/d', comparison_type=oxia.ComparisonType.HIGHER)
+        self.assertEqual(k + '/e', key)
+        self.assertEqual(b'4', val)
+
+        # ---------------------------------------------------------------
+
+        key, val, _ = client.get(k + '/e')
+        self.assertEqual(k + '/e', key)
+        self.assertEqual(b'4', val)
+
+        key, val, _ = client.get(k + '/e', comparison_type=oxia.ComparisonType.EQUAL)
+        self.assertEqual(k + '/e', key)
+        self.assertEqual(b'4', val)
+
+        key, val, _ = client.get(k + '/e', comparison_type=oxia.ComparisonType.FLOOR)
+        self.assertEqual(k + '/e', key)
+        self.assertEqual(b'4', val)
+
+        key, val, _ = client.get(k + '/e', comparison_type=oxia.ComparisonType.CEILING)
+        self.assertEqual(k + '/e', key)
+        self.assertEqual(b'4', val)
+
+        key, val, _ = client.get(k + '/e', comparison_type=oxia.ComparisonType.LOWER)
+        self.assertEqual(k + '/d', key)
+        self.assertEqual(b'3', val)
+
+        key, val, _ = client.get(k + '/e', comparison_type=oxia.ComparisonType.HIGHER)
+        self.assertEqual(k + '/g', key)
+        self.assertEqual(b'6', val)
+
+        # ---------------------------------------------------------------
+
+        with self.assertRaises(oxia.KeyNotFound):
+            client.get(k + '/f')
+
+        with self.assertRaises(oxia.KeyNotFound):
+            client.get(k + '/f', comparison_type=oxia.ComparisonType.EQUAL)
+
+        key, val, _ = client.get(k + '/f', comparison_type=oxia.ComparisonType.FLOOR)
+        self.assertEqual(k + '/e', key)
+        self.assertEqual(b'4', val)
+
+        key, val, _ = client.get(k + '/f', comparison_type=oxia.ComparisonType.CEILING)
+        self.assertEqual(k + '/g', key)
+        self.assertEqual(b'6', val)
+
+        key, val, _ = client.get(k + '/f', comparison_type=oxia.ComparisonType.LOWER)
+        self.assertEqual(k + '/e', key)
+        self.assertEqual(b'4', val)
+
+        key, val, _ = client.get(k + '/f', comparison_type=oxia.ComparisonType.HIGHER)
+        self.assertEqual(k + '/g', key)
+        self.assertEqual(b'6', val)
+
+
+    def test_partition_routing(self):
+        client = oxia.Client(self.service_address)
+        k = new_key()
+        client.put(k + "/a", '0', partition_key='x')
+
+        with self.assertRaises(oxia.KeyNotFound):
+            client.get(k + '/a')
+
+        key, value, _ = client.get(k + '/a', partition_key='x')
+        self.assertEqual(k + '/a', key)
+        self.assertEqual(b'0', value)
+
+        client.put(k + "/a", '0', partition_key='x')
+        client.put(k + "/b", '1', partition_key='x')
+        client.put(k + "/c", '2', partition_key='x')
+        client.put(k + "/d", '3', partition_key='x')
+        client.put(k + "/e", '4', partition_key='x')
+        client.put(k + "/f", '5', partition_key='x')
+        client.put(k + "/g", '6', partition_key='x')
+
+        # Listing must yield the same results
+        keys = client.list(k + '/a', k + '/d')
+        self.assertEqual([k + '/a', k + '/b', k + 'c'], keys)
+        # 	assert.NoError(t, err)
+        # 	assert.Equal(t, []string{"a", "b", "c"}, keys)
         #
-        # kr2, va2, vr2 = client2.get(kx)
-        # self.assertEqual(1, vr2.modifications_count())
-        # self.assertEqual(vx, vr2.version_id())
-        # self.assertEqual(va2, b'y')
-        # self.assertFalse(vr2.is_ephemeral())
-        # self.assertIsNone(vr2.client_identity())
+        # 	keys, err = client.List(ctx, "a", "d", PartitionKey("x"))
+        # 	assert.NoError(t, err)
+        # 	assert.Equal(t, []string{"a", "b", "c"}, keys)
         #
-        # client2.close()
-
-
+        # 	// Searching with wrong partition-key will return empty list
+        # 	keys, err = client.List(ctx, "a", "d", PartitionKey("wrong-partition-key"))
+        # 	assert.NoError(t, err)
+        # 	assert.Equal(t, []string{}, keys)
+        #
+        # 	// Delete with wrong partition key would fail
+        # 	err = client.Delete(ctx, "g", PartitionKey("wrong-partition-key"))
+        # 	assert.ErrorIs(t, err, ErrKeyNotFound)
+        #
+        # 	err = client.Delete(ctx, "g", PartitionKey("x"))
+        # 	assert.NoError(t, err)
+        #
+        # 	// Get tests
+        # 	key, value, _, err = client.Get(ctx, "a", ComparisonHigher())
+        # 	assert.NoError(t, err)
+        # 	assert.Equal(t, "b", key)
+        # 	assert.Equal(t, "1", string(value))
+        #
+        # 	key, value, _, err = client.Get(ctx, "a", ComparisonHigher(), PartitionKey("x"))
+        # 	assert.NoError(t, err)
+        # 	assert.Equal(t, "b", key)
+        # 	assert.Equal(t, "1", string(value))
+        #
+        # 	key, value, _, err = client.Get(ctx, "a", ComparisonHigher(), PartitionKey("wrong-partition-key"))
+        # 	assert.NoError(t, err)
+        # 	assert.NotEqual(t, "b", key)
+        # 	assert.NotEqual(t, "1", string(value))
+        #
+        # 	// Delete with wrong partition key would fail to delete all keys
+        # 	err = client.DeleteRange(ctx, "c", "e", PartitionKey("wrong-partition-key"))
+        # 	assert.NoError(t, err)
+        #
+        # 	keys, err = client.List(ctx, "c", "f")
+        # 	assert.NoError(t, err)
+        # 	assert.Equal(t, []string{"c", "d", "e"}, keys)
+        #
+        # 	err = client.DeleteRange(ctx, "c", "e", PartitionKey("x"))
+        # 	assert.NoError(t, err)
+        #
+        # 	keys, err = client.List(ctx, "c", "f")
+        # 	assert.NoError(t, err)
+        # 	assert.Equal(t, []string{"e"}, keys)
 
 if __name__ == '__main__':
     unittest.main()
