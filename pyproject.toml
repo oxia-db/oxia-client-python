@@ -25,7 +25,7 @@ dependencies = [
 ]
 
 [build-system]
-requires = ["setuptools>=61.0", "wheel", "pydoctor", "grpcio-tools", "betterproto2-compiler"]
+requires = ["setuptools>=61.0", "wheel", "pydoctor", "grpcio-tools", "betterproto2-compiler", "testcontainers"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]

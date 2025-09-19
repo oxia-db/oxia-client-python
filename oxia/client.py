@@ -12,8 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import functools
+import heapq
+from typing import Iterator
 
-from oxia.internal.compare import compare_tuple_with_slash
+from oxia.internal.compare import compare_tuple_with_slash, compare_with_slash
 from oxia.internal.connection_pool import ConnectionPool
 from oxia.internal.notifications import Notifications
 from oxia.internal.sessions import SessionManager
@@ -159,7 +161,9 @@ class Client:
     def put(self, key: str, value: object,
             partition_key: str = None,
             expected_version_id: int = None,
-            ephemeral: bool = False) -> (str, Version):
+            ephemeral: bool = False,
+            sequence_keys_deltas: list[int] = None,
+            ) -> (str, Version):
         """
             Put Associates a value with a key
 
@@ -183,12 +187,20 @@ class Client:
         """
         shard, stub = self.service_discovery.get_leader(key, partition_key)
 
+        if sequence_keys_deltas:
+            if not partition_key:
+                raise InvalidOptions("sequence_keys_deltas can only be used with partition_key")
+            if expected_version_id is not None:
+                raise InvalidOptions("sequence_keys_deltas cannot be used with expected_version_id")
+
         if type(value) is str:
             value = bytes(str(value), encoding='utf-8')
 
         pr = pb.PutRequest(key=key, value=value,
                            partition_key=partition_key,
-                           expected_version_id=expected_version_id)
+                           expected_version_id=expected_version_id,
+                           sequence_key_delta=sequence_keys_deltas,
+                           )
         if ephemeral:
             session = self.session_manager.get_session(shard)
             pr.session_id = session.session_id()
@@ -312,7 +324,7 @@ class Client:
             all_res = []
             for shard, stub in self.service_discovery.get_all_shards():
                 all_res.extend(self._list_single_shard(shard, stub, min_key_inclusive, max_key_exclusive, use_index))
-            all_res.sort()
+            all_res.sort(key=functools.cmp_to_key(compare_with_slash))
             return all_res
         else:
             shard, stub = self.service_discovery.get_leader(partition_key, partition_key)
@@ -330,11 +342,35 @@ class Client:
             keys.extend(i.keys)
         return keys
 
-    def range_scan(self, min_key_inclusive: str, max_key_exclusive: str, **options):
+    def range_scan(self,
+                   min_key_inclusive: str,
+                   max_key_exclusive: str,
+                   partition_key: str = None,
+                   use_index: str = None,
+                   ) -> Iterator[tuple[str, str, Version]]:
         # // RangeScan perform a scan for existing records with any keys within the specified range.
         # // Ordering in results channel is respected only if a [PartitionKey] option is passed (and the keys were
         # // inserted with that partition key).
-        pass
+        if partition_key is None:
+            its = []
+            for shard, stub in self.service_discovery.get_all_shards():
+                its.append(self._range_scan_single_shard(shard, stub, min_key_inclusive, max_key_exclusive, use_index))
+            return heapq.merge(*its, key=functools.cmp_to_key(compare_tuple_with_slash))
+        else:
+            shard, stub = self.service_discovery.get_leader(partition_key, partition_key)
+            return self._range_scan_single_shard(shard, stub, min_key_inclusive, max_key_exclusive, use_index)
+
+    @staticmethod
+    def _range_scan_single_shard(shard, stub, min_key_inclusive: str, max_key_exclusive: str, use_index: str) \
+                            -> Iterator[tuple[str, str, Version]]:
+        it = stub.range_scan(pb.RangeScanRequest(shard=shard,
+                            start_inclusive=min_key_inclusive,
+                            end_exclusive=max_key_exclusive,
+                            secondary_index_name=use_index))
+
+        for res in it:
+            for x in res.records:
+                yield x.key, x.value, _get_version(x.version)
 
     def get_sequence_updates(self, prefix_key: str, **options):
         # // GetSequenceUpdates allows to subscribe to the updates happening on a sequential key
@@ -355,6 +391,9 @@ class Client:
 
 
 class OxiaException(Exception):
+    pass
+
+class InvalidOptions(OxiaException):
     pass
 
 class KeyNotFound(OxiaException):

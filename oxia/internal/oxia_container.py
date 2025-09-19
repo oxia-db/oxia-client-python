@@ -12,14 +12,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from oxia.client import (ComparisonType,
-                         Client,
-                         Version,
-                         OxiaException,
-                         InvalidOptions,
-                         KeyNotFound,
-                         UnexpectedVersionId,
-                         SessionNotFound,
-                         EXPECTED_RECORD_DOES_NOT_EXIST,
-                         )
-from oxia.api import NotificationType, Notification
+from testcontainers.core.container import DockerContainer
+from testcontainers.core.wait_strategies import LogMessageWaitStrategy
+
+class OxiaContainer(DockerContainer):
+    def __init__(self, shards=1):
+        super().__init__(
+            image='oxia/oxia:latest',
+            command=f"oxia standalone --shards={shards}",
+            ports=[6648,]
+        )
+        self.delay = self.waiting_for(LogMessageWaitStrategy("Serving Prometheus metrics"))
+
+    def service_url(self):
+        return f"localhost:{self.get_exposed_port(6648)}"
