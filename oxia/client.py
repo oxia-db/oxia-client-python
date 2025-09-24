@@ -163,6 +163,7 @@ class Client:
             expected_version_id: int = None,
             ephemeral: bool = False,
             sequence_keys_deltas: list[int] = None,
+            secondary_indexes: dict[str, str] = None,
             ) -> (str, Version):
         """
             Put Associates a value with a key
@@ -205,6 +206,12 @@ class Client:
             session = self.session_manager.get_session(shard)
             pr.session_id = session.session_id()
             pr.client_identity = session.client_identifier()
+
+        if secondary_indexes:
+            indexes = []
+            for k, v in secondary_indexes.items():
+                indexes.append(pb.SecondaryIndex(k, v))
+            pr.secondary_indexes = indexes
 
         res = stub.write(pb.WriteRequest(shard=shard, puts=[pr]))
 

@@ -556,5 +556,150 @@ class OxiaClientTestCase(unittest.TestCase):
 
             client.close()
 
+    def test_sequence_ordering(self):
+        with OxiaContainer() as server:
+            client = oxia.Client(server.service_url())
+            for i in range(100):
+                key, _ = client.put('a', '0', partition_key='x', sequence_keys_deltas=[1])
+                self.assertEqual(f'a-{i+1:020}', key)
+
+    def test_get_without_value(self):
+        with OxiaContainer() as server:
+            client = oxia.Client(server.service_url())
+
+            client.put('a', '0')
+            key, val, _ = client.get('a', include_value=False)
+            self.assertEqual('a', key)
+            self.assertIsNone(val)
+
+            client.close()
+
+    def test_secondary_indexes(self):
+        with OxiaContainer() as server:
+            client = oxia.Client(server.service_url())
+
+            # ////////////////////////////////////////////////////////////////////////
+
+            for i in range(10):
+                key = chr(ord('a') + i)
+                value = str(i)
+                client.put(key, value, secondary_indexes={'value-idx': value})
+
+            # ////////////////////////////////////////////////////////////////////////
+
+            l = client.list("1", "4", use_index="value-idx")
+            self.assertEqual(['b', 'c', 'd'], l)
+
+            # ////////////////////////////////////////////////////////////////////////
+
+            it = client.range_scan('1', '4', use_index="value-idx")
+
+            idx = 1
+            for k, v, _ in it:
+                self.assertEqual(chr(ord('a') + idx), k)
+                self.assertEqual(str(idx).encode(), v)
+                idx += 1
+
+            self.assertEqual(4, idx)
+
+            client.close()
+
+    def test_secondary_indexes_get(self):
+        with OxiaContainer() as server:
+            client = oxia.Client(server.service_url())
+
+            # ////////////////////////////////////////////////////////////////////////
+
+            for i in range(1, 10):
+                key = chr(ord('a') + i)
+                value = f'{i:03}'
+                client.put(key, value, secondary_indexes={'value-idx': value})
+
+            # ////////////////////////////////////////////////////////////////////////
+
+            with self.assertRaises(oxia.KeyNotFound):
+                client.get('000', use_index="value-idx")
+
+            gk, gv, _ = client.get('001', use_index="value-idx")
+            self.assertEqual('b', gk)
+            self.assertEqual(b'001', gv)
+
+            gk, gv, _ = client.get('005', use_index="value-idx")
+            self.assertEqual('f', gk)
+            self.assertEqual(b'005', gv)
+
+            gk, gv, _ = client.get('009', use_index="value-idx")
+            self.assertEqual('j', gk)
+            self.assertEqual(b'009', gv)
+
+            with self.assertRaises(oxia.KeyNotFound):
+                client.get('999', use_index="value-idx")
+
+            # ////////////////////////////////////////////////////////////////////////
+
+            with self.assertRaises(oxia.KeyNotFound):
+                client.get('000', use_index="value-idx", comparison_type=oxia.ComparisonType.FLOOR)
+
+            gk, gv, _ = client.get('001', use_index="value-idx", comparison_type=oxia.ComparisonType.FLOOR)
+            self.assertEqual('b', gk)
+            self.assertEqual(b'001', gv)
+
+            gk, gv, _ = client.get('005', use_index="value-idx", comparison_type=oxia.ComparisonType.FLOOR)
+            self.assertEqual('f', gk)
+            self.assertEqual(b'005', gv)
+
+            gk, gv, _ = client.get('009', use_index="value-idx", comparison_type=oxia.ComparisonType.FLOOR)
+            self.assertEqual('j', gk)
+            self.assertEqual(b'009', gv)
+
+            gk, gv, _ = client.get('999', use_index="value-idx", comparison_type=oxia.ComparisonType.FLOOR)
+            self.assertEqual('j', gk)
+            self.assertEqual(b'009', gv)
+
+            # ////////////////////////////////////////////////////////////////////////
+
+            gk, gv, _ = client.get('000', use_index="value-idx", comparison_type=oxia.ComparisonType.HIGHER)
+            self.assertEqual('b', gk)
+            self.assertEqual(b'001', gv)
+
+            gk, gv, _ = client.get('001', use_index="value-idx", comparison_type=oxia.ComparisonType.HIGHER)
+            self.assertEqual('c', gk)
+            self.assertEqual(b'002', gv)
+
+            gk, gv, _ = client.get('005', use_index="value-idx", comparison_type=oxia.ComparisonType.HIGHER)
+            self.assertEqual('g', gk)
+            self.assertEqual(b'006', gv)
+
+            with self.assertRaises(oxia.KeyNotFound):
+                client.get('009', use_index="value-idx", comparison_type=oxia.ComparisonType.HIGHER)
+
+            with self.assertRaises(oxia.KeyNotFound):
+                client.get('999', use_index="value-idx", comparison_type=oxia.ComparisonType.HIGHER)
+
+            # ////////////////////////////////////////////////////////////////////////
+
+            gk, gv, _ = client.get('000', use_index="value-idx", comparison_type=oxia.ComparisonType.CEILING)
+            self.assertEqual('b', gk)
+            self.assertEqual(b'001', gv)
+
+            gk, gv, _ = client.get('001', use_index="value-idx", comparison_type=oxia.ComparisonType.CEILING)
+            self.assertEqual('b', gk)
+            self.assertEqual(b'001', gv)
+
+            gk, gv, _ = client.get('005', use_index="value-idx", comparison_type=oxia.ComparisonType.CEILING)
+            self.assertEqual('f', gk)
+            self.assertEqual(b'005', gv)
+
+            gk, gv, _ = client.get('009', use_index="value-idx", comparison_type=oxia.ComparisonType.CEILING)
+            self.assertEqual('j', gk)
+            self.assertEqual(b'009', gv)
+
+            with self.assertRaises(oxia.KeyNotFound):
+                client.get('999', use_index="value-idx", comparison_type=oxia.ComparisonType.CEILING)
+
+
+            client.close()
+
+
 if __name__ == '__main__':
     unittest.main()
