@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import queue
+import time
 import unittest
 
 import oxia
@@ -605,7 +606,7 @@ class OxiaClientTestCase(unittest.TestCase):
             client.close()
 
     def test_secondary_indexes_get(self):
-        with OxiaContainer() as server:
+        with OxiaContainer(shards=10) as server:
             client = oxia.Client(server.service_url())
 
             # ////////////////////////////////////////////////////////////////////////
@@ -697,6 +698,41 @@ class OxiaClientTestCase(unittest.TestCase):
             with self.assertRaises(oxia.KeyNotFound):
                 client.get('999', use_index="value-idx", comparison_type=oxia.ComparisonType.CEILING)
 
+
+            client.close()
+
+    def test_sequence_updates(self):
+        with OxiaContainer(shards=10) as server:
+            client = oxia.Client(server.service_url())
+
+            # ////////////////////////////////////////////////////////////////////////
+            with self.assertRaises(oxia.InvalidOptions):
+                client.get_sequence_updates("a")
+
+            # gs1 = client.get_sequence_updates("a", partition_key="x")
+            # gs1.close()
+
+            k1, _ = client.put('a', '0', sequence_keys_deltas=[1], partition_key='x')
+            self.assertEqual('a-%020d' % 1, k1)
+            k2, _ = client.put('a', '0', sequence_keys_deltas=[1], partition_key='x')
+            self.assertEqual('a-%020d' % 2, k2)
+
+            # gs2 = client.get_sequence_updates("a", partition_key="x")
+            # self.assertEqual(k2, next(gs2))
+            # gs2.close()
+
+            k3, _ = client.put('a', '0', sequence_keys_deltas=[1], partition_key='x')
+            self.assertEqual('a-%020d' % 3, k3)
+
+            # with self.assertRaises(StopIteration):
+            #     next(gs2)
+
+            gs3 = client.get_sequence_updates("a", partition_key="x")
+            self.assertEqual(k3, next(gs3))
+
+            k4, _ = client.put('a', '0', sequence_keys_deltas=[1], partition_key='x')
+            self.assertEqual('a-%020d' % 4, k4)
+            self.assertEqual(k4, next(gs3))
 
             client.close()
 

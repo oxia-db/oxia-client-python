@@ -1080,7 +1080,7 @@ class OxiaClientStub:
         Requests all the records between a range of keys.
         """
 
-        yield from self._channel.unary_stream(
+        return self._channel.unary_stream(
             "/io.streamnative.oxia.proto.OxiaClient/GetSequenceUpdates",
             GetSequenceUpdatesRequest.SerializeToString,
             GetSequenceUpdatesResponse.FromString,

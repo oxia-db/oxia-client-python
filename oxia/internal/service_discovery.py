@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import grpc
 
 import oxia.proto.io.streamnative.oxia.proto as pb
 from oxia.internal.backoff import Backoff
@@ -68,9 +69,10 @@ class ServiceDiscovery(object):
                     self._parse_assignments(sa.namespaces[self._namespace])
                     self._init_barrier.wait()
                     backoff.reset()
-            except Exception as e:
+            except grpc.RpcError as e:
                 if not self._closed:
-                    print("Failed to get assignments", e)
+                    if e.code() != grpc.StatusCode.CANCELLED:
+                        print("Failed to get assignments", e)
                     backoff.wait_next()
 
     def _parse_assignments(self, assignments):
@@ -104,7 +106,7 @@ class ServiceDiscovery(object):
                     return self._connection_pool.get(s.leader)
         raise Exception(f'No stub found for shard {shard}')
 
-    def get_leader(self, key: str, partition_key: str):
+    def get_leader(self, key: str, partition_key: str) -> (int, pb.OxiaClientStub):
         hashing_key = partition_key if partition_key else key
         s = self.get_shard(hashing_key)
         return s.shard, self._connection_pool.get(s.leader)

@@ -13,11 +13,13 @@
 # limitations under the License.
 import functools
 import heapq
+from abc import ABC
 from typing import Iterator
 
 from oxia.internal.compare import compare_tuple_with_slash, compare_with_slash
 from oxia.internal.connection_pool import ConnectionPool
 from oxia.internal.notifications import Notifications
+from oxia.internal.sequence_updates import SequenceUpdatesImpl
 from oxia.internal.sessions import SessionManager
 from oxia.internal.service_discovery import ServiceDiscovery
 import oxia.proto.io.streamnative.oxia.proto as pb
@@ -148,12 +150,19 @@ class Version:
 
 EXPECTED_RECORD_DOES_NOT_EXIST = -1
 
+
+class SequenceUpdates(Iterator[str], ABC):
+    def close(self):
+        pass
+
+
 class Client:
     def __init__(self, service_address: str,
                  namespace: str = "default",
                  session_timeout_ms: int = 30_000,
                  client_identifier: str = None,
                  ):
+        self._closed = False
         self.connections = ConnectionPool()
         self.service_discovery = ServiceDiscovery(service_address, self.connections, namespace)
         self.session_manager = SessionManager(self.service_discovery, session_timeout_ms, client_identifier)
@@ -379,12 +388,14 @@ class Client:
             for x in res.records:
                 yield x.key, x.value, _get_version(x.version)
 
-    def get_sequence_updates(self, prefix_key: str, **options):
+    def get_sequence_updates(self, prefix_key: str, partition_key: str = None) -> SequenceUpdates:
         # // GetSequenceUpdates allows to subscribe to the updates happening on a sequential key
         # // The channel will report the current latest sequence for a given key.
         # // Multiple updates can be collapsed into one single event with the
         # // highest sequence.
-        pass
+        if partition_key is None:
+            raise InvalidOptions("get_sequence_updates requires a partition_key")
+        return SequenceUpdatesImpl(self.service_discovery, prefix_key, partition_key, lambda : self._closed)
 
     def get_notifications(self):
         """GetNotifications creates a new subscription to receive the notifications
@@ -392,6 +403,7 @@ class Client:
         return Notifications(self.service_discovery)
 
     def close(self):
+        self._closed = True
         self.session_manager.close()
         self.connections.close()
         self.service_discovery.close()
