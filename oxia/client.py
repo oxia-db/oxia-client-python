@@ -23,6 +23,7 @@ from oxia.internal.sequence_updates import SequenceUpdatesImpl
 from oxia.internal.sessions import SessionManager
 from oxia.internal.service_discovery import ServiceDiscovery
 import oxia.proto.io.streamnative.oxia.proto as pb
+import oxia.ex
 
 import datetime
 from enum import IntEnum
@@ -31,11 +32,11 @@ def _check_status(status: pb.Status):
     if status == pb.Status.OK:
         pass
     elif status == pb.Status.KEY_NOT_FOUND:
-        raise KeyNotFound()
+        raise oxia.ex.KeyNotFound()
     elif status == pb.Status.UNEXPECTED_VERSION_ID:
-        raise UnexpectedVersionId()
+        raise oxia.ex.UnexpectedVersionId()
     elif status == pb.Status.SESSION_DOES_NOT_EXIST:
-        raise SessionNotFound()
+        raise oxia.ex.SessionNotFound()
 
 
 def _get_version(pbv : pb.Version):
@@ -199,9 +200,9 @@ class Client:
 
         if sequence_keys_deltas:
             if not partition_key:
-                raise InvalidOptions("sequence_keys_deltas can only be used with partition_key")
+                raise oxia.ex.InvalidOptions("sequence_keys_deltas can only be used with partition_key")
             if expected_version_id is not None:
-                raise InvalidOptions("sequence_keys_deltas cannot be used with expected_version_id")
+                raise oxia.ex.InvalidOptions("sequence_keys_deltas cannot be used with expected_version_id")
 
         if type(value) is str:
             value = bytes(str(value), encoding='utf-8')
@@ -293,9 +294,9 @@ class Client:
                 try:
                     k, val, version =  self._get_single_shard(shard, stub, key, comparison_type, include_value, use_index)
                     results.append((k, val, version))
-                except KeyNotFound:
+                except oxia.ex.KeyNotFound:
                     pass
-            if not results: raise KeyNotFound
+            if not results: raise oxia.ex.KeyNotFound
             results.sort(key=functools.cmp_to_key(compare_tuple_with_slash))
 
             if comparison_type == ComparisonType.EQUAL or \
@@ -394,7 +395,7 @@ class Client:
         # // Multiple updates can be collapsed into one single event with the
         # // highest sequence.
         if partition_key is None:
-            raise InvalidOptions("get_sequence_updates requires a partition_key")
+            raise oxia.ex.InvalidOptions("get_sequence_updates requires a partition_key")
         return SequenceUpdatesImpl(self._service_discovery, prefix_key, partition_key, lambda : self._closed)
 
     def get_notifications(self):
@@ -407,19 +408,3 @@ class Client:
         self._session_manager.close()
         self._connections.close()
         self._service_discovery.close()
-
-
-class OxiaException(Exception):
-    pass
-
-class InvalidOptions(OxiaException):
-    pass
-
-class KeyNotFound(OxiaException):
-    pass
-
-class UnexpectedVersionId(OxiaException):
-    pass
-
-class SessionNotFound(OxiaException):
-    pass

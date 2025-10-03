@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import queue
-import time
 import unittest
 
 import oxia
@@ -56,14 +55,14 @@ class OxiaClientTestCase(unittest.TestCase):
             dr = client.delete(prefix + "/a", expected_version_id=va.version_id())
             self.assertEqual(True, dr)
 
-            with self.assertRaises(oxia.KeyNotFound):
+            with self.assertRaises(oxia.ex.KeyNotFound):
                 client.get(prefix + "/a")
 
             client.delete_range(prefix + "/c", prefix + "/d")
-            with self.assertRaises(oxia.KeyNotFound):
+            with self.assertRaises(oxia.ex.KeyNotFound):
                 client.get(prefix + "/c")
 
-            with self.assertRaises(oxia.KeyNotFound):
+            with self.assertRaises(oxia.ex.KeyNotFound):
                 client.get(prefix + "/d")
 
             client.close()
@@ -146,9 +145,9 @@ class OxiaClientTestCase(unittest.TestCase):
 
             client.close()
 
-            client2 = oxia.Client(self.service_address)
+            client2 = oxia.Client(server.service_url())
 
-            with self.assertRaises(oxia.KeyNotFound):
+            with self.assertRaises(oxia.ex.KeyNotFound):
                 client2.get(kx)
 
             client2.close()
@@ -264,7 +263,7 @@ class OxiaClientTestCase(unittest.TestCase):
             self.assertEqual(k + '/a', key)
             self.assertEqual(b'0', val)
 
-            with self.assertRaises(oxia.KeyNotFound):
+            with self.assertRaises(oxia.ex.KeyNotFound):
                 client.get(k + '/a', comparison_type=oxia.ComparisonType.LOWER)
 
             key, val, _ = client.get(k + '/a', comparison_type=oxia.ComparisonType.HIGHER)
@@ -273,10 +272,10 @@ class OxiaClientTestCase(unittest.TestCase):
 
             # ---------------------------------------------------------------
 
-            with self.assertRaises(oxia.KeyNotFound):
+            with self.assertRaises(oxia.ex.KeyNotFound):
                 client.get(k + '/b')
 
-            with self.assertRaises(oxia.KeyNotFound):
+            with self.assertRaises(oxia.ex.KeyNotFound):
                 client.get(k + '/b', comparison_type=oxia.ComparisonType.EQUAL)
 
             key, val, _ = client.get(k + '/b', comparison_type=oxia.ComparisonType.FLOOR)
@@ -375,10 +374,10 @@ class OxiaClientTestCase(unittest.TestCase):
 
             # ---------------------------------------------------------------
 
-            with self.assertRaises(oxia.KeyNotFound):
+            with self.assertRaises(oxia.ex.KeyNotFound):
                 client.get(k + '/f')
 
-            with self.assertRaises(oxia.KeyNotFound):
+            with self.assertRaises(oxia.ex.KeyNotFound):
                 client.get(k + '/f', comparison_type=oxia.ComparisonType.EQUAL)
 
             key, val, _ = client.get(k + '/f', comparison_type=oxia.ComparisonType.FLOOR)
@@ -403,7 +402,7 @@ class OxiaClientTestCase(unittest.TestCase):
             client = oxia.Client(server.service_url())
             client.put('a', '0', partition_key='x')
 
-            with self.assertRaises(oxia.KeyNotFound):
+            with self.assertRaises(oxia.ex.KeyNotFound):
                 client.get('/a')
 
             key, value, _ = client.get('a', partition_key='x')
@@ -462,10 +461,10 @@ class OxiaClientTestCase(unittest.TestCase):
         with OxiaContainer(shards=2) as server:
             client = oxia.Client(server.service_url())
 
-            with self.assertRaises(oxia.InvalidOptions):
+            with self.assertRaises(oxia.ex.InvalidOptions):
                 client.put('a', '0', sequence_keys_deltas=[1])
 
-            with self.assertRaises(oxia.InvalidOptions):
+            with self.assertRaises(oxia.ex.InvalidOptions):
                 client.put('a', '0', sequence_keys_deltas=[1], partition_key='x', expected_version_id=1)
 
             key, _ = client.put('a', '0', sequence_keys_deltas=[1], partition_key='x')
@@ -477,7 +476,7 @@ class OxiaClientTestCase(unittest.TestCase):
             key, _ = client.put('a', '2', sequence_keys_deltas=[1, 6], partition_key='x')
             self.assertEqual(f'a-{5:020}-{6:020}', key)
 
-            with self.assertRaises(oxia.KeyNotFound):
+            with self.assertRaises(oxia.ex.KeyNotFound):
                 client.get('a', partition_key='x')
 
             _, val, _ = client.get(f'a-{1:020}', partition_key='x')
@@ -618,7 +617,7 @@ class OxiaClientTestCase(unittest.TestCase):
 
             # ////////////////////////////////////////////////////////////////////////
 
-            with self.assertRaises(oxia.KeyNotFound):
+            with self.assertRaises(oxia.ex.KeyNotFound):
                 client.get('000', use_index="value-idx")
 
             gk, gv, _ = client.get('001', use_index="value-idx")
@@ -633,12 +632,12 @@ class OxiaClientTestCase(unittest.TestCase):
             self.assertEqual('j', gk)
             self.assertEqual(b'009', gv)
 
-            with self.assertRaises(oxia.KeyNotFound):
+            with self.assertRaises(oxia.ex.KeyNotFound):
                 client.get('999', use_index="value-idx")
 
             # ////////////////////////////////////////////////////////////////////////
 
-            with self.assertRaises(oxia.KeyNotFound):
+            with self.assertRaises(oxia.ex.KeyNotFound):
                 client.get('000', use_index="value-idx", comparison_type=oxia.ComparisonType.FLOOR)
 
             gk, gv, _ = client.get('001', use_index="value-idx", comparison_type=oxia.ComparisonType.FLOOR)
@@ -671,10 +670,10 @@ class OxiaClientTestCase(unittest.TestCase):
             self.assertEqual('g', gk)
             self.assertEqual(b'006', gv)
 
-            with self.assertRaises(oxia.KeyNotFound):
+            with self.assertRaises(oxia.ex.KeyNotFound):
                 client.get('009', use_index="value-idx", comparison_type=oxia.ComparisonType.HIGHER)
 
-            with self.assertRaises(oxia.KeyNotFound):
+            with self.assertRaises(oxia.ex.KeyNotFound):
                 client.get('999', use_index="value-idx", comparison_type=oxia.ComparisonType.HIGHER)
 
             # ////////////////////////////////////////////////////////////////////////
@@ -695,7 +694,7 @@ class OxiaClientTestCase(unittest.TestCase):
             self.assertEqual('j', gk)
             self.assertEqual(b'009', gv)
 
-            with self.assertRaises(oxia.KeyNotFound):
+            with self.assertRaises(oxia.ex.KeyNotFound):
                 client.get('999', use_index="value-idx", comparison_type=oxia.ComparisonType.CEILING)
 
 
@@ -706,7 +705,7 @@ class OxiaClientTestCase(unittest.TestCase):
             client = oxia.Client(server.service_url())
 
             # ////////////////////////////////////////////////////////////////////////
-            with self.assertRaises(oxia.InvalidOptions):
+            with self.assertRaises(oxia.ex.InvalidOptions):
                 client.get_sequence_updates("a")
 
             # gs1 = client.get_sequence_updates("a", partition_key="x")

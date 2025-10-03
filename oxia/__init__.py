@@ -12,14 +12,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import oxia.ex as ex
 from oxia.client import (ComparisonType,
                          Client,
                          Version,
-                         OxiaException,
-                         InvalidOptions,
-                         KeyNotFound,
-                         UnexpectedVersionId,
-                         SessionNotFound,
                          EXPECTED_RECORD_DOES_NOT_EXIST,
                          )
 from oxia.api import NotificationType, Notification
+
+__all__ = ['ComparisonType',
+           'Client',
+           'Version',
+           'EXPECTED_RECORD_DOES_NOT_EXIST',
+           'NotificationType',
+           'Notification',
+           ]
