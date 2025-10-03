@@ -163,9 +163,9 @@ class Client:
                  client_identifier: str = None,
                  ):
         self._closed = False
-        self.connections = ConnectionPool()
-        self.service_discovery = ServiceDiscovery(service_address, self.connections, namespace)
-        self.session_manager = SessionManager(self.service_discovery, session_timeout_ms, client_identifier)
+        self._connections = ConnectionPool()
+        self._service_discovery = ServiceDiscovery(service_address, self._connections, namespace)
+        self._session_manager = SessionManager(self._service_discovery, session_timeout_ms, client_identifier)
 
     def put(self, key: str, value: object,
             partition_key: str = None,
@@ -195,7 +195,7 @@ class Client:
         :param ephemeral:
         :return:
         """
-        shard, stub = self.service_discovery.get_leader(key, partition_key)
+        shard, stub = self._service_discovery.get_leader(key, partition_key)
 
         if sequence_keys_deltas:
             if not partition_key:
@@ -212,7 +212,7 @@ class Client:
                            sequence_key_delta=sequence_keys_deltas,
                            )
         if ephemeral:
-            session = self.session_manager.get_session(shard)
+            session = self._session_manager.get_session(shard)
             pr.session_id = session.session_id()
             pr.client_identity = session.client_identifier()
 
@@ -240,7 +240,7 @@ class Client:
         # // a specific existing version by passing the [ExpectedVersionId] option.
         # // Returns [ErrorUnexpectedVersionId] if the expected version id does not match the
         # // current version id of the record
-        shard, stub = self.service_discovery.get_leader(key, partition_key)
+        shard, stub = self._service_discovery.get_leader(key, partition_key)
 
         dr = pb.DeleteRequest(key=key,
                               expected_version_id=expected_version_id)
@@ -259,10 +259,10 @@ class Client:
         # // Refer to this documentation for the specifics:
         # // https://github.com/streamnative/oxia/blob/main/docs/oxia-key-sorting.md
         if partition_key is None:
-            for shard, stub in self.service_discovery.get_all_shards():
+            for shard, stub in self._service_discovery.get_all_shards():
                 self._delete_range_single_shard(min_key_inclusive, max_key_exclusive, shard, stub)
         else:
-            shard, stub = self.service_discovery.get_leader(partition_key, partition_key)
+            shard, stub = self._service_discovery.get_leader(partition_key, partition_key)
             self._delete_range_single_shard(min_key_inclusive, max_key_exclusive, shard, stub)
 
     @staticmethod
@@ -289,7 +289,7 @@ class Client:
                      or use_index is not None):
 
             results = []
-            for shard, stub in self.service_discovery.get_all_shards():
+            for shard, stub in self._service_discovery.get_all_shards():
                 try:
                     k, val, version =  self._get_single_shard(shard, stub, key, comparison_type, include_value, use_index)
                     results.append((k, val, version))
@@ -308,7 +308,7 @@ class Client:
 
         else:
             # Single shard get operation
-            shard, stub = self.service_discovery.get_leader(key, partition_key)
+            shard, stub = self._service_discovery.get_leader(key, partition_key)
             return self._get_single_shard(shard, stub, key, comparison_type, include_value, use_index)
 
     @staticmethod
@@ -338,12 +338,12 @@ class Client:
         # // https://github.com/streamnative/oxia/blob/main/docs/oxia-key-sorting.md
         if partition_key is None:
             all_res = []
-            for shard, stub in self.service_discovery.get_all_shards():
+            for shard, stub in self._service_discovery.get_all_shards():
                 all_res.extend(self._list_single_shard(shard, stub, min_key_inclusive, max_key_exclusive, use_index))
             all_res.sort(key=functools.cmp_to_key(compare_with_slash))
             return all_res
         else:
-            shard, stub = self.service_discovery.get_leader(partition_key, partition_key)
+            shard, stub = self._service_discovery.get_leader(partition_key, partition_key)
             return self._list_single_shard(shard, stub, min_key_inclusive, max_key_exclusive, use_index)
 
     @staticmethod
@@ -369,11 +369,11 @@ class Client:
         # // inserted with that partition key).
         if partition_key is None:
             its = []
-            for shard, stub in self.service_discovery.get_all_shards():
+            for shard, stub in self._service_discovery.get_all_shards():
                 its.append(self._range_scan_single_shard(shard, stub, min_key_inclusive, max_key_exclusive, use_index))
             return heapq.merge(*its, key=functools.cmp_to_key(compare_tuple_with_slash))
         else:
-            shard, stub = self.service_discovery.get_leader(partition_key, partition_key)
+            shard, stub = self._service_discovery.get_leader(partition_key, partition_key)
             return self._range_scan_single_shard(shard, stub, min_key_inclusive, max_key_exclusive, use_index)
 
     @staticmethod
@@ -395,18 +395,18 @@ class Client:
         # // highest sequence.
         if partition_key is None:
             raise InvalidOptions("get_sequence_updates requires a partition_key")
-        return SequenceUpdatesImpl(self.service_discovery, prefix_key, partition_key, lambda : self._closed)
+        return SequenceUpdatesImpl(self._service_discovery, prefix_key, partition_key, lambda : self._closed)
 
     def get_notifications(self):
         """GetNotifications creates a new subscription to receive the notifications
            from Oxia for any change that is applied to the database"""
-        return Notifications(self.service_discovery)
+        return Notifications(self._service_discovery)
 
     def close(self):
         self._closed = True
-        self.session_manager.close()
-        self.connections.close()
-        self.service_discovery.close()
+        self._session_manager.close()
+        self._connections.close()
+        self._service_discovery.close()
 
 
 class OxiaException(Exception):
