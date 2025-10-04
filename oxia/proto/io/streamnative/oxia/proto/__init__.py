@@ -53,7 +53,7 @@ import grpc
 
 from .....message_pool import default_message_pool
 
-_COMPILER_VERSION = "0.8.0"
+_COMPILER_VERSION = "0.9.0"
 betterproto2.check_compiler_version(_COMPILER_VERSION)
 
 
@@ -1090,10 +1090,10 @@ class OxiaClientStub:
         self, message: "NotificationsRequest"
     ) -> "Iterator[NotificationBatch]":
         return self._channel.unary_stream(
-                "/io.streamnative.oxia.proto.OxiaClient/GetNotifications",
-                NotificationsRequest.SerializeToString,
-                NotificationBatch.FromString,
-            )(message)
+            "/io.streamnative.oxia.proto.OxiaClient/GetNotifications",
+            NotificationsRequest.SerializeToString,
+            NotificationBatch.FromString,
+        )(message)
 
     def create_session(
         self, message: "CreateSessionRequest"
