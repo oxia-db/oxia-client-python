@@ -50,12 +50,13 @@ def _get_version(pbv : pb.Version):
     return v
 
 class ComparisonType(IntEnum):
+    """ComparisonType is an enumeration of the possible comparison types for the `get()` operation."""
 
     """Equal sets the Get() operation to compare the stored key for equality."""
     EQUAL = pb.KeyComparisonType.EQUAL
 
     """Floor option will make the get operation to search for the record whose key is the 
-       highest key <= to the supplied key."""
+           highest key <= to the supplied key."""
     FLOOR = pb.KeyComparisonType.FLOOR
 
     """Ceiling option will make the get operation to search for the record whose key is the 
