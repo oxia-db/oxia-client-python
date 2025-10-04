@@ -14,7 +14,7 @@
 
 import threading, uuid
 from oxia.internal.service_discovery import ServiceDiscovery
-import oxia.proto.io.streamnative.oxia.proto as pb
+from oxia.internal.proto.io.streamnative import oxia as pb
 
 
 class Session:

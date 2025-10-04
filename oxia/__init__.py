@@ -18,14 +18,14 @@ Oxia Python Client SDK
 
 import oxia.ex as ex
 from oxia.client import (
-    ComparisonType,
     Client,
-    Version,
-    EXPECTED_RECORD_DOES_NOT_EXIST,
 )
-from oxia.api import (
+from oxia.defs import (
+    ComparisonType,
     NotificationType,
     Notification,
+    Version,
+    EXPECTED_RECORD_DOES_NOT_EXIST,
 )
 
 __all__ = [

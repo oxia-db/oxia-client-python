@@ -15,8 +15,8 @@
 from oxia.internal.service_discovery import ServiceDiscovery
 from oxia.internal.backoff import Backoff
 import threading, queue, logging
-import oxia.proto.io.streamnative.oxia.proto as pb
-from oxia.api import Notification, NotificationType
+from oxia.internal.proto.io.streamnative import oxia as pb
+from oxia.defs import Notification, NotificationType
 
 class Notifications:
     def __init__(self, service_discovery : ServiceDiscovery):

@@ -13,7 +13,7 @@
 # limitations under the License.
 
 import grpc
-from oxia.proto.io.streamnative.oxia.proto import OxiaClientStub
+from oxia.internal.proto.io.streamnative.oxia.proto import OxiaClientStub
 
 class ConnectionPool:
 

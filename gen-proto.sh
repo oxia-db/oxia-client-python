@@ -16,4 +16,4 @@
 
 source .venv/bin/activate
 
-python -m grpc.tools.protoc -I. --python_betterproto2_out=oxia/proto oxia/proto/client.proto
+python -m grpc.tools.protoc -I. --python_betterproto2_out=oxia/internal/proto oxia/internal/proto/client.proto

@@ -16,7 +16,8 @@ import threading, queue
 import grpc
 
 from oxia.internal.service_discovery import ServiceDiscovery
-import oxia.proto.io.streamnative.oxia.proto as pb
+from oxia.internal.proto.io.streamnative import oxia as pb
+
 
 class SequenceUpdatesImpl:
     def __init__(self, service_discovery: ServiceDiscovery, prefix_key: str, partition_key: str, is_client_closed):

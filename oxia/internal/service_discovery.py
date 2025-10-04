@@ -13,7 +13,7 @@
 # limitations under the License.
 import grpc
 
-import oxia.proto.io.streamnative.oxia.proto as pb
+from oxia.internal.proto.io.streamnative import oxia as pb
 from oxia.internal.backoff import Backoff
 
 import threading
