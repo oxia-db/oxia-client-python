@@ -14,7 +14,7 @@
 
 from enum import Enum, IntEnum
 from abc import ABC
-from oxia.internal.proto.io.streamnative import oxia as pb
+from oxia.internal.proto.io.streamnative.oxia import proto as pb
 import datetime
 from typing import Iterator
 

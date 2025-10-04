@@ -21,7 +21,7 @@ from oxia.internal.notifications import Notifications
 from oxia.internal.sequence_updates import SequenceUpdatesImpl
 from oxia.internal.sessions import SessionManager
 from oxia.internal.service_discovery import ServiceDiscovery
-from oxia.internal.proto.io.streamnative import oxia as pb
+from oxia.internal.proto.io.streamnative.oxia import proto as pb
 import oxia.ex
 
 import datetime
