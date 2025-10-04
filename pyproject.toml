@@ -19,6 +19,9 @@ description = "Oxia client for Python"
 authors = [
     { name = "StreamNative"}
 ]
+
+requires-python = ">=3.13"
+
 dependencies = [
     "betterproto2-compiler",
     "grpcio",
@@ -29,6 +32,10 @@ dependencies = [
 dev = [
     "grpcio-tools>=1.75.1",
     "pydoctor>=25.10.1",
+    "pytest>=8.4.2",
     "testcontainers>=4.13.1",
 ]
 
+[build-system]
+requires = ["uv_build>=0.8.22,<0.9.0"]
+build-backend = "uv_build"

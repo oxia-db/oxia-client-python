@@ -177,7 +177,7 @@ class Client:
         # // Returns ErrorKeyNotFound if the record does not exist
         if partition_key is None and \
                 (comparison_type != oxia.defs.ComparisonType.EQUAL
-                     or use_index is not None):
+                 or use_index is not None):
 
             results = []
             for shard, stub in self._service_discovery.get_all_shards():

@@ -212,7 +212,7 @@ class OxiaClientTestCase(unittest.TestCase):
     def test_sessions_notifications(self):
         with OxiaContainer() as server:
             client1 = oxia.Client(server.service_url(),
-                                 client_identifier="client-1")
+                                  client_identifier="client-1")
 
             client2 = oxia.Client(server.service_url(),
                                   client_identifier="client-2")

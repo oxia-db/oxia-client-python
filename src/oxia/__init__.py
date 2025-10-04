@@ -16,7 +16,6 @@
 Oxia Python Client SDK
 """
 
-import oxia.ex as ex
 from oxia.client import (
     Client,
 )
