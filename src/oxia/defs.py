@@ -12,8 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from enum import Enum, IntEnum
-from oxia.internal.proto.io.streamnative.oxia import proto as pb
+from enum import Enum
 
 class NotificationType(Enum):
     """NotificationType represents the type of the notification event."""

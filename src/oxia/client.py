@@ -73,7 +73,7 @@ class Version:
         the current version. It does not accept any parameters and simply outputs
         the version ID as an integer.
 
-        :return: The version ID.
+        @return: The version ID.
         """
         return self._version_id
 
@@ -88,7 +88,7 @@ class Version:
         """
         Get the time when the record was last modified.
 
-        :return: The last modification timestamp.
+        @return: The last modification timestamp.
         """
         return self._modified_timestamp
 
@@ -97,7 +97,7 @@ class Version:
         Get the number of modifications to the record since it was last created.
         If the record gets deleted and recreated, the ModificationsCount will restart at 0.
 
-        :return: The number of modifications.
+        @return: The number of modifications.
         """
         return self._modifications_count
 
@@ -105,7 +105,7 @@ class Version:
         """
         Check if the record is ephemeral.
 
-        :return: True if the record is ephemeral, False otherwise.
+        @return: True if the record is ephemeral, False otherwise.
         """
         return self._session_id is not None
 
@@ -115,7 +115,7 @@ class Version:
         For ephemeral records, this is the identifier of the session to which this record lifecycle
         is attached to. Non-ephemeral records will always report 0.
 
-        :return: The session ID.
+        @return: The session ID.
         """
         return self._session_id
 
@@ -125,7 +125,7 @@ class Version:
         For ephemeral records, this is the unique identity of the Oxia client that did last modify it.
         It will be empty for all non-ephemeral records.
 
-        :return: The client identity.
+        @return: The client identity.
         """
         return self._client_identity
 
@@ -162,11 +162,11 @@ class Client:
         and connection pooling. The constructor is responsible for setting up the required
         infrastructure to communicate with the service discovery system and maintain sessions.
 
-        :param service_address: The Oxia service address to connect to.
-        :param namespace: The namespace to which this client belongs. Default is "default".
-        :param session_timeout_ms: Duration of the session timeout in milliseconds. Default is 30,000 ms.
-        :param client_identifier: A unique identifier for the client. If None, a default identifier will
-            be generated internally.
+        @param service_address: The Oxia service address to connect to.
+        @param namespace: The namespace to which this client belongs. Default is "default".
+        @param session_timeout_ms: Duration of the session timeout in milliseconds. Default is 30,000 ms.
+        @param client_identifier: A unique identifier for the client. If None, a default identifier will
+        be generated internally.
         """
         self._closed = False
         self._connections = ConnectionPool()
@@ -189,18 +189,18 @@ class Client:
            - Client can assert that the record does not exist by passing [oxia.EXPECTED_RECORD_DOES_NOT_EXIST]
            - Client can create an ephemeral record with `ephemeral=True`
 
-        :param key: the key to associate with the value
-        :param value: the value to associate with the key
-        :type value: str | bytes
-        :param sequence_keys_deltas: a list of sequence keys to be used as deltas for the key. Oxia will create
-                    new unique keys atomically adding the sequence key deltas to the key.
-        :param secondary_indexes: a dictionary of secondary indexes to be created for the record.
-        :param partition_key: the partition key to use (instead of the actual record key)
-        :param expected_version_id: the expected version id of the record to insert. If not specified, the put operation is not conditional.
-        :param ephemeral: whether the record should be created as ephemeral. Ephemeral records are deleted when the session expires.
-        :return: (actual_key, version)
-        :raises oxia.ex.InvalidOptions: if the sequence_keys_deltas option is used with partition_key
-        :raises oxia.ex.UnexpectedVersionId: if the expected version id does not match the current version id of the record
+        @param key: the key to associate with the value
+        @param value: the value to associate with the key
+        @type value: str | bytes
+        @param sequence_keys_deltas: a list of sequence keys to be used as deltas for the key. Oxia will create
+        new unique keys atomically adding the sequence key deltas to the key.
+        @param secondary_indexes: a dictionary of secondary indexes to be created for the record.
+        @param partition_key: the partition key to use (instead of the actual record key)
+        @param expected_version_id: the expected version id of the record to insert. If not specified, the put operation is not conditional.
+        @param ephemeral: whether the record should be created as ephemeral. Ephemeral records are deleted when the session expires.
+        @return: (actual_key, version)
+        @raises oxia.ex.InvalidOptions: if the sequence_keys_deltas option is used with partition_key
+        @raises oxia.ex.UnexpectedVersionId: if the expected version id does not match the current version id of the record
         """
         shard, stub = self._service_discovery.get_leader(key, partition_key)
 
@@ -247,12 +247,12 @@ class Client:
         The delete operation can be made conditional on that the record hasn't changed from
         a specific existing version by passing the [ExpectedVersionId] option.
 
-        :param key: the key to delete
-        :param partition_key: the partition key to use (instead of the actual record key)
-        :param expected_version_id: the expected version id of the record to delete. If not specified, the delete operation is not conditional.
-        :return: true if the record was deleted, false otherwise
-        :raises oxia.ex.KeyNotFound: if the record does not exist
-        :raises oxia.ex.UnexpectedVersionId: if the expected version id does not match the current version id of the record
+        @param key: the key to delete
+        @param partition_key: the partition key to use (instead of the actual record key)
+        @param expected_version_id: the expected version id of the record to delete. If not specified, the delete operation is not conditional.
+        @return: true if the record was deleted, false otherwise
+        @raises oxia.ex.KeyNotFound: if the record does not exist
+        @raises oxia.ex.UnexpectedVersionId: if the expected version id does not match the current version id of the record
         """
         shard, stub = self._service_discovery.get_leader(key, partition_key)
 
@@ -275,9 +275,9 @@ class Client:
         Refer to this documentation for the specifics:
         https://oxia-db.github.io/docs/features/oxia-key-sorting
 
-        :param min_key_inclusive: the minimum key to delete from
-        :param max_key_exclusive: the maximum key to delete to (exclusive)
-        :param partition_key: if set, the delete range will be applied to the shard with the specified partition key.
+        @param min_key_inclusive: the minimum key to delete from
+        @param max_key_exclusive: the maximum key to delete to (exclusive)
+        @param partition_key: if set, the delete range will be applied to the shard with the specified partition key.
         """
 
         if partition_key is None:
@@ -307,13 +307,13 @@ class Client:
 
         In addition to the value, a version object is also returned, with information about the record state.
 
-        :param key: the key to retrieve
-        :param partition_key: the partition key to use (instead of the actual record key)
-        :param comparison_type: the comparison type to use
-        :param include_value: whether to include the value in the result
-        :param use_index: the name of the secondary index to use
-        :return: (key, value, version)
-        :raises oxia.ex.KeyNotFound: if the record does not exist
+        @param key: the key to retrieve
+        @param partition_key: the partition key to use (instead of the actual record key)
+        @param comparison_type: the comparison type to use
+        @param include_value: whether to include the value in the result
+        @param use_index: the name of the secondary index to use
+        @return: (key, value, version)
+        @raises oxia.ex.KeyNotFound: if the record does not exist
         """
         if partition_key is None and \
                 (comparison_type != ComparisonType.EQUAL
@@ -370,11 +370,11 @@ class Client:
         Refer to this documentation for the specifics:
         https://oxia-db.github.io/docs/features/oxia-key-sorting
 
-        :param min_key_inclusive: the minimum key to list from (inclusive).
-        :param max_key_exclusive: the maximum key to list to (exclusive).
-        :param partition_key: if set, the list will be applied to the shard with the specified partition key.
-        :param use_index: if set, the list will be applied to the secondary index with the specified name.
-        :return: the list of keys within the specified range.
+        @param min_key_inclusive: the minimum key to list from (inclusive).
+        @param max_key_exclusive: the maximum key to list to (exclusive).
+        @param partition_key: if set, the list will be applied to the shard with the specified partition key.
+        @param use_index: if set, the list will be applied to the secondary index with the specified name.
+        @return: the list of keys within the specified range.
         """
         if partition_key is None:
             all_res = []
@@ -411,11 +411,11 @@ class Client:
         Refer to this documentation for the specifics:
         https://oxia-db.github.io/docs/features/oxia-key-sorting
 
-        :param min_key_inclusive: the minimum key to list from (inclusive).
-        :param max_key_exclusive: the maximum key to list to (exclusive).
-        :param partition_key: if set, the range-scan will be applied to the shard with the specified partition key.
-        :param use_index: if set, the range-scan will be applied to the secondary index with the specified name.
-        :return: an iterator over the records within the specified range. Each record is a tuple of (key, value, version).
+        @param min_key_inclusive: the minimum key to list from (inclusive).
+        @param max_key_exclusive: the maximum key to list to (exclusive).
+        @param partition_key: if set, the range-scan will be applied to the shard with the specified partition key.
+        @param use_index: if set, the range-scan will be applied to the secondary index with the specified name.
+        @return: an iterator over the records within the specified range. Each record is a tuple of (key, value, version).
         """
         if partition_key is None:
             its = []
@@ -444,9 +444,9 @@ class Client:
 
         Multiple updates can be collapsed into one single event with the highest sequence.
 
-        :param prefix_key: the prefix for the sequential key.
-        :param partition_key: the partition key to use (this is required)
-        :return: a SequenceUpdates object that can be used to iterate over the updates. Should be closed when done.
+        @param prefix_key: the prefix for the sequential key.
+        @param partition_key: the partition key to use (this is required)
+        @return: a SequenceUpdates object that can be used to iterate over the updates. Should be closed when done.
         """
         if partition_key is None:
             raise oxia.ex.InvalidOptions("get_sequence_updates requires a partition_key")
@@ -457,8 +457,8 @@ class Client:
         Creates a new subscription to receive the notifications
         from Oxia for any change that is applied to the database
 
-        :return: an iterator over the notifications. Each notification is a Notification object.
-        :rtype: Iterator[oxia.Notification]
+        @return: an iterator over the notifications. Each notification is a Notification object.
+        @rtype: Iterator[oxia.Notification]
         """
         return Notifications(self._service_discovery)
 

@@ -41,3 +41,6 @@ jobs:
 
     - name: Run tests
       run: uv run pytest
+
+    - name: Verify documentation
+      run: uv run pydoctor --config pydoctor.ini
