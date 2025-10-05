@@ -1,0 +1,68 @@
+# Copyright 2025 StreamNative, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+name: Build and Publish Documentation
+
+on:
+  push:
+    tags:
+      - 'v*'
+    branches:
+      - main
+
+permissions:
+  contents: write  # Needed to push to gh-pages branch
+
+jobs:
+  build-docs:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v5
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v6
+
+    - name: Install Python
+      run: uv python install 3.13
+
+    - name: Build distribution packages
+      run: uv build
+
+    - name: Extract tag version
+      id: tag
+      run: echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+    
+    - name: Generate documentation
+      run: |
+        uv run pydoctor \
+          --config pydoctor.ini
+          --project-version="${{ steps.tag.outputs.version }}" \
+          --html-viewsource-base="https://github.com/${{ github.repository }}/tree/${{ steps.tag.outputs.version }}"
+
+#      uses: peaceiris/actions-gh-pages@v4
+#      with:
+#        github_token: ${{ secrets.GITHUB_TOKEN }}
+#        publish_dir: ./docs/api
+#        destination_dir: ${{ steps.tag.outputs.version }}
+#        keep_files: true  # Keep previous versions
+    
+    - name: Update latest symlink
+      uses: peaceiris/actions-gh-pages@v4
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        publish_dir: ./docs/api
+        destination_dir: latest
+        keep_files: false  # Replace latest with new version
