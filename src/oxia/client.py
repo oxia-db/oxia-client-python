@@ -13,7 +13,6 @@
 # limitations under the License.
 import functools
 import heapq
-from typing import Iterator
 
 from oxia.internal.compare import compare_tuple_with_slash, compare_with_slash
 from oxia.internal.connection_pool import ConnectionPool
@@ -24,7 +23,10 @@ from oxia.internal.service_discovery import ServiceDiscovery
 from oxia.internal.proto.io.streamnative.oxia import proto as pb
 import oxia.ex
 
+from abc import ABC
 import datetime
+import enum
+from typing import Iterator
 
 def _check_status(status: pb.Status):
     if status == pb.Status.OK:
@@ -37,8 +39,18 @@ def _check_status(status: pb.Status):
         raise oxia.ex.SessionNotFound()
 
 
+class ComparisonType(enum.IntEnum):
+    """ComparisonType is an enumeration of the possible comparison types for the `get()` operation."""
+
+    EQUAL = int(pb.KeyComparisonType.EQUAL) #: Equal sets the Get() operation to compare the stored key for equality.
+    FLOOR = int(pb.KeyComparisonType.FLOOR) #: Floor option will make the get operation to search for the record whose key is the highest key <= to the supplied key.
+    CEILING = int(pb.KeyComparisonType.CEILING) #: Ceiling option will make the get operation to search for the record whose key is the lowest key >= to the supplied key.
+    LOWER = int(pb.KeyComparisonType.LOWER) #: Lower option will make the get operation to search for the record whose key is strictly < to the supplied key.
+    HIGHER = int(pb.KeyComparisonType.HIGHER) #: Higher option will make the get operation to search for the record whose key is strictly > to the supplied key.
+
+
 def _get_version(pbv : pb.Version):
-    v = oxia.defs.Version()
+    v = Version()
     v._version_id = pbv.version_id
     v._modifications_count = pbv.modifications_count
     v._created_timestamp = datetime.datetime.fromtimestamp(pbv.created_timestamp/1000.0)
@@ -47,12 +59,115 @@ def _get_version(pbv : pb.Version):
     v._client_identity = pbv.client_identity
     return v
 
+
+class Version:
+    """
+    Version includes some information regarding the state of a record.
+    """
+
+    def version_id(self) -> int:
+        """
+        Retrieve the version ID.
+
+        This method returns the version ID, which is an integer value representing
+        the current version. It does not accept any parameters and simply outputs
+        the version ID as an integer.
+
+        :return: The version ID.
+        """
+        return self._version_id
+
+    def created_timestamp(self) -> datetime.datetime:
+        """
+        The time when the record was last created
+        (If the record gets deleted and recreated, it will have a new CreatedTimestamp value)
+        """
+        return self._created_timestamp
+
+    def modified_timestamp(self) -> datetime.datetime:
+        """
+        Get the time when the record was last modified.
+
+        :return: The last modification timestamp.
+        """
+        return self._modified_timestamp
+
+    def modifications_count(self) -> int:
+        """
+        Get the number of modifications to the record since it was last created.
+        If the record gets deleted and recreated, the ModificationsCount will restart at 0.
+
+        :return: The number of modifications.
+        """
+        return self._modifications_count
+
+    def is_ephemeral(self) -> bool:
+        """
+        Check if the record is ephemeral.
+
+        :return: True if the record is ephemeral, False otherwise.
+        """
+        return self._session_id is not None
+
+    def session_id(self) -> int:
+        """
+        Get the session identifier for ephemeral records.
+        For ephemeral records, this is the identifier of the session to which this record lifecycle
+        is attached to. Non-ephemeral records will always report 0.
+
+        :return: The session ID.
+        """
+        return self._session_id
+
+    def client_identity(self) -> str:
+        """
+        Get the client identity for ephemeral records.
+        For ephemeral records, this is the unique identity of the Oxia client that did last modify it.
+        It will be empty for all non-ephemeral records.
+
+        :return: The client identity.
+        """
+        return self._client_identity
+
+    def __str__(self):
+        return f"Version(version_id: {self.version_id()}, session_id: {self.session_id()}, modifications_count: {self.modifications_count()}, created_timestamp: {self.created_timestamp()}, modified_timestamp: {self.modified_timestamp()}, client_identity: {self.client_identity()})"
+
+EXPECTED_RECORD_DOES_NOT_EXIST = -1
+"""When doing a `put()`, this value can be used to indicate that the record should not exist."""
+
+class SequenceUpdates(Iterator[str], ABC):
+    """
+    Represents an iterable sequence of key updates that can be closed when the caller is done.
+    """
+
+    def close(self):
+        """
+        Close the iterator and release any resources.
+        """
+        pass
+
+
 class Client:
+    """Client is the main entry point to the Oxia Python client"""
+
     def __init__(self, service_address: str,
                  namespace: str = "default",
                  session_timeout_ms: int = 30_000,
                  client_identifier: str = None,
                  ):
+        """
+        Create a new Oxia client instance.
+
+        Initializes an instance of the class that manages service discovery, session management,
+        and connection pooling. The constructor is responsible for setting up the required
+        infrastructure to communicate with the service discovery system and maintain sessions.
+
+        :param service_address: The Oxia service address to connect to.
+        :param namespace: The namespace to which this client belongs. Default is "default".
+        :param session_timeout_ms: Duration of the session timeout in milliseconds. Default is 30,000 ms.
+        :param client_identifier: A unique identifier for the client. If None, a default identifier will
+            be generated internally.
+        """
         self._closed = False
         self._connections = ConnectionPool()
         self._service_discovery = ServiceDiscovery(service_address, self._connections, namespace)
@@ -64,27 +179,28 @@ class Client:
             ephemeral: bool = False,
             sequence_keys_deltas: list[int] = None,
             secondary_indexes: dict[str, str] = None,
-            ) -> (str, oxia.defs.Version):
+            ) -> (str, Version):
         """
-            Put Associates a value with a key
+        Associates a value with a key
 
-          There are few options that can be passed to the Put operation:
+        There are few options that can be passed to the Put operation:
            - The Put operation can be made conditional on that the record hasn't changed from
-             a specific existing version by passing the [ExpectedVersionId] option.
-           - Client can assert that the record does not exist by passing [ExpectedRecordNotExists]
-           - Client can create an ephemeral record with [Ephemeral]
+             a specific existing version by passing the `expected_version_id` option.
+           - Client can assert that the record does not exist by passing [oxia.EXPECTED_RECORD_DOES_NOT_EXIST]
+           - Client can create an ephemeral record with `ephemeral=True`
 
-          Returns the actual key of the inserted record
-          Returns a [Version] object that contains information about the newly updated record
-          Throw [ErrorUnexpectedVersionId] if the expected version id does not match the
-          current version id of the record
-
-        :param key:
-        :param value:
-        :param partition_key:
-        :param expected_version_id:
-        :param ephemeral:
-        :return:
+        :param key: the key to associate with the value
+        :param value: the value to associate with the key
+        :type value: str | bytes
+        :param sequence_keys_deltas: a list of sequence keys to be used as deltas for the key. Oxia will create
+                    new unique keys atomically adding the sequence key deltas to the key.
+        :param secondary_indexes: a dictionary of secondary indexes to be created for the record.
+        :param partition_key: the partition key to use (instead of the actual record key)
+        :param expected_version_id: the expected version id of the record to insert. If not specified, the put operation is not conditional.
+        :param ephemeral: whether the record should be created as ephemeral. Ephemeral records are deleted when the session expires.
+        :return: (actual_key, version)
+        :raises oxia.ex.InvalidOptions: if the sequence_keys_deltas option is used with partition_key
+        :raises oxia.ex.UnexpectedVersionId: if the expected version id does not match the current version id of the record
         """
         shard, stub = self._service_discovery.get_leader(key, partition_key)
 
@@ -125,12 +241,19 @@ class Client:
     def delete(self, key: str,
                partition_key: str = None,
                expected_version_id: int = None, ) -> bool:
-        # // Delete removes the key and its associated value from the data store.
-        # //
-        # // The Delete operation can be made conditional on that the record hasn't changed from
-        # // a specific existing version by passing the [ExpectedVersionId] option.
-        # // Returns [ErrorUnexpectedVersionId] if the expected version id does not match the
-        # // current version id of the record
+        """
+        Removes the key and its associated value from the data store.
+
+        The delete operation can be made conditional on that the record hasn't changed from
+        a specific existing version by passing the [ExpectedVersionId] option.
+
+        :param key: the key to delete
+        :param partition_key: the partition key to use (instead of the actual record key)
+        :param expected_version_id: the expected version id of the record to delete. If not specified, the delete operation is not conditional.
+        :return: true if the record was deleted, false otherwise
+        :raises oxia.ex.KeyNotFound: if the record does not exist
+        :raises oxia.ex.UnexpectedVersionId: if the expected version id does not match the current version id of the record
+        """
         shard, stub = self._service_discovery.get_leader(key, partition_key)
 
         dr = pb.DeleteRequest(key=key,
@@ -145,10 +268,18 @@ class Client:
             return True
 
     def delete_range(self,  min_key_inclusive: str, max_key_exclusive: str, partition_key: str = None):
-        # // DeleteRange deletes any records with keys within the specified range.
-        # // Note: Oxia uses a custom sorting order that treats `/` characters in special way.
-        # // Refer to this documentation for the specifics:
-        # // https://github.com/streamnative/oxia/blob/main/docs/oxia-key-sorting.md
+        """
+        Deletes any records with keys within the specified range.
+
+        Note: Oxia uses a custom sorting order that treats `/` characters in a special way.
+        Refer to this documentation for the specifics:
+        https://oxia-db.github.io/docs/features/oxia-key-sorting
+
+        :param min_key_inclusive: the minimum key to delete from
+        :param max_key_exclusive: the maximum key to delete to (exclusive)
+        :param partition_key: if set, the delete range will be applied to the shard with the specified partition key.
+        """
+
         if partition_key is None:
             for shard, stub in self._service_discovery.get_all_shards():
                 self._delete_range_single_shard(min_key_inclusive, max_key_exclusive, shard, stub)
@@ -167,16 +298,25 @@ class Client:
 
     def get(self, key: str,
             partition_key: str = None,
-            comparison_type: oxia.defs.ComparisonType = oxia.defs.ComparisonType.EQUAL,
+            comparison_type: ComparisonType = ComparisonType.EQUAL,
             include_value: bool = True,
             use_index: str = None,
-            ) -> (str, str, oxia.defs.Version):
-        # // Get returns the value associated with the specified key.
-        # // In addition to the value, a version object is also returned, with information
-        # // about the record state.
-        # // Returns ErrorKeyNotFound if the record does not exist
+            ) -> (str, str, Version):
+        """
+        Returns the value associated with the specified key.
+
+        In addition to the value, a version object is also returned, with information about the record state.
+
+        :param key: the key to retrieve
+        :param partition_key: the partition key to use (instead of the actual record key)
+        :param comparison_type: the comparison type to use
+        :param include_value: whether to include the value in the result
+        :param use_index: the name of the secondary index to use
+        :return: (key, value, version)
+        :raises oxia.ex.KeyNotFound: if the record does not exist
+        """
         if partition_key is None and \
-                (comparison_type != oxia.defs.ComparisonType.EQUAL
+                (comparison_type != ComparisonType.EQUAL
                  or use_index is not None):
 
             results = []
@@ -189,12 +329,12 @@ class Client:
             if not results: raise oxia.ex.KeyNotFound
             results.sort(key=functools.cmp_to_key(compare_tuple_with_slash))
 
-            if comparison_type == oxia.defs.ComparisonType.EQUAL or \
-                comparison_type == oxia.defs.ComparisonType.CEILING or \
-                comparison_type == oxia.defs.ComparisonType.HIGHER:
+            if comparison_type == ComparisonType.EQUAL or \
+                comparison_type == ComparisonType.CEILING or \
+                comparison_type == ComparisonType.HIGHER:
                 return results[0]
-            elif comparison_type == oxia.defs.ComparisonType.FLOOR or \
-                    comparison_type == oxia.defs.ComparisonType.LOWER:
+            elif comparison_type == ComparisonType.FLOOR or \
+                    comparison_type == ComparisonType.LOWER:
                 return results[-1]
 
         else:
@@ -205,9 +345,9 @@ class Client:
     @staticmethod
     def _get_single_shard(shard: int, stub,
                           key: str,
-                          comparison_type: oxia.defs.ComparisonType,
+                          comparison_type: ComparisonType,
                           include_value: bool,
-                          use_index: str) -> (str, str, oxia.defs.Version):
+                          use_index: str) -> (str, str, Version):
         gr = pb.GetRequest(key=key,
                            comparison_type=comparison_type,
                            include_value=include_value,
@@ -222,11 +362,20 @@ class Client:
     def list(self, min_key_inclusive: str, max_key_exclusive: str,
              partition_key: str = None,
              use_index: str = None,
-             ):
-        # // List any existing keys within the specified range.
-        # // Note: Oxia uses a custom sorting order that treats `/` characters in special way.
-        # // Refer to this documentation for the specifics:
-        # // https://github.com/streamnative/oxia/blob/main/docs/oxia-key-sorting.md
+             ) -> list[str]:
+        """
+        List all the keys within the specified range.
+
+        Note: Oxia uses a custom sorting order that treats `/` characters in special way.
+        Refer to this documentation for the specifics:
+        https://oxia-db.github.io/docs/features/oxia-key-sorting
+
+        :param min_key_inclusive: the minimum key to list from (inclusive).
+        :param max_key_exclusive: the maximum key to list to (exclusive).
+        :param partition_key: if set, the list will be applied to the shard with the specified partition key.
+        :param use_index: if set, the list will be applied to the secondary index with the specified name.
+        :return: the list of keys within the specified range.
+        """
         if partition_key is None:
             all_res = []
             for shard, stub in self._service_discovery.get_all_shards():
@@ -254,10 +403,20 @@ class Client:
                    max_key_exclusive: str,
                    partition_key: str = None,
                    use_index: str = None,
-                   ) -> Iterator[tuple[str, str, oxia.defs.Version]]:
-        # // RangeScan perform a scan for existing records with any keys within the specified range.
-        # // Ordering in results channel is respected only if a [PartitionKey] option is passed (and the keys were
-        # // inserted with that partition key).
+                   ) -> Iterator[tuple[str, str, Version]]:
+        """
+        perform a scan for existing records with any keys within the specified range.
+
+        Note: Oxia uses a custom sorting order that treats `/` characters in special way.
+        Refer to this documentation for the specifics:
+        https://oxia-db.github.io/docs/features/oxia-key-sorting
+
+        :param min_key_inclusive: the minimum key to list from (inclusive).
+        :param max_key_exclusive: the maximum key to list to (exclusive).
+        :param partition_key: if set, the range-scan will be applied to the shard with the specified partition key.
+        :param use_index: if set, the range-scan will be applied to the secondary index with the specified name.
+        :return: an iterator over the records within the specified range. Each record is a tuple of (key, value, version).
+        """
         if partition_key is None:
             its = []
             for shard, stub in self._service_discovery.get_all_shards():
@@ -269,7 +428,7 @@ class Client:
 
     @staticmethod
     def _range_scan_single_shard(shard, stub, min_key_inclusive: str, max_key_exclusive: str, use_index: str) \
-                            -> Iterator[tuple[str, str, oxia.defs.Version]]:
+                            -> Iterator[tuple[str, str, Version]]:
         it = stub.range_scan(pb.RangeScanRequest(shard=shard,
                             start_inclusive=min_key_inclusive,
                             end_exclusive=max_key_exclusive,
@@ -279,21 +438,32 @@ class Client:
             for x in res.records:
                 yield x.key, x.value, _get_version(x.version)
 
-    def get_sequence_updates(self, prefix_key: str, partition_key: str = None) -> oxia.defs.SequenceUpdates:
-        # // GetSequenceUpdates allows to subscribe to the updates happening on a sequential key
-        # // The channel will report the current latest sequence for a given key.
-        # // Multiple updates can be collapsed into one single event with the
-        # // highest sequence.
+    def get_sequence_updates(self, prefix_key: str, partition_key: str = None) -> SequenceUpdates:
+        """
+        Subscribe to the updates happening on a sequential key.
+
+        Multiple updates can be collapsed into one single event with the highest sequence.
+
+        :param prefix_key: the prefix for the sequential key.
+        :param partition_key: the partition key to use (this is required)
+        :return: a SequenceUpdates object that can be used to iterate over the updates. Should be closed when done.
+        """
         if partition_key is None:
             raise oxia.ex.InvalidOptions("get_sequence_updates requires a partition_key")
         return SequenceUpdatesImpl(self._service_discovery, prefix_key, partition_key, lambda : self._closed)
 
-    def get_notifications(self):
-        """GetNotifications creates a new subscription to receive the notifications
-           from Oxia for any change that is applied to the database"""
+    def get_notifications(self) -> Iterator[oxia.defs.Notification]:
+        """
+        Creates a new subscription to receive the notifications
+        from Oxia for any change that is applied to the database
+
+        :return: an iterator over the notifications. Each notification is a Notification object.
+        :rtype: Iterator[oxia.Notification]
+        """
         return Notifications(self._service_discovery)
 
     def close(self):
+        """Close closes the client and all underlying connections"""
         self._closed = True
         self._session_manager.close()
         self._connections.close()

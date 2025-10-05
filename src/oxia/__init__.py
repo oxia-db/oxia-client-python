@@ -13,18 +13,29 @@
 # limitations under the License.
 
 """
-Oxia Python Client SDK
+Oxia Client SDK for Python.
+
+Usage example:
+
+.. code-block:: python
+
+    client = oxia.Client('oxia://localhost:6648', namespace='default')
+
+    key, version = client.put('my-key', 'my-value')
+
+    key, value, version = client.get('my-key')
 """
 
 from oxia.client import (
     Client,
-)
-from oxia.defs import (
-    ComparisonType,
-    NotificationType,
-    Notification,
     Version,
     EXPECTED_RECORD_DOES_NOT_EXIST,
+    ComparisonType,
+    SequenceUpdates
+)
+from oxia.defs import (
+    NotificationType,
+    Notification,
 )
 
 __all__ = [
@@ -35,4 +46,5 @@ __all__ = [
     'EXPECTED_RECORD_DOES_NOT_EXIST',
     'NotificationType',
     'Notification',
+    'SequenceUpdates',
 ]
