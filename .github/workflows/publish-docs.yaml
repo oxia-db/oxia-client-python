@@ -48,7 +48,7 @@ jobs:
     - name: Generate documentation
       run: |
         uv run pydoctor \
-          --config pydoctor.ini
+          --config pydoctor.ini \
           --project-version="${{ steps.tag.outputs.version }}" \
           --html-viewsource-base="https://github.com/${{ github.repository }}/tree/${{ steps.tag.outputs.version }}"
 
