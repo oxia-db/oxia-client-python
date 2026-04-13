@@ -12,23 +12,41 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import threading, uuid
+import logging
+import threading
+import time
+import uuid
 from oxia.internal.service_discovery import ServiceDiscovery
 from oxia.internal.proto.io.streamnative.oxia import proto as pb
+
+log = logging.getLogger(__name__)
 
 
 class Session:
     def __init__(self, shard: int, client_identifier: str, service_discovery: ServiceDiscovery,
-                 session_timeout_ms: int):
+                 session_timeout_ms: int, on_close=None):
         self._shard = shard
         self._client_identifier = client_identifier
         self._service_discovery = service_discovery
+        self._on_close = on_close
+        self._session_timeout_ms = session_timeout_ms
+        self._heartbeat_interval_ms = max(session_timeout_ms // 10, 2_000)
+        self._closed = False
+        self._close_lock = threading.Lock()
+        self._stop_event = threading.Event()
         res = service_discovery.get_stub(shard).create_session(pb.CreateSessionRequest(
             shard=shard,
             session_timeout_ms=session_timeout_ms,
             client_identity=client_identifier,
         ))
         self._session_id = res.session_id
+        self._last_successful_response = time.monotonic()
+        self._heartbeat_thread = threading.Thread(
+            target=self._run_keepalive_loop,
+            daemon=True,
+            name=f"oxia-session-{shard}",
+        )
+        self._heartbeat_thread.start()
 
     def shard_id(self):
         return self._shard
@@ -39,11 +57,59 @@ class Session:
     def client_identifier(self):
         return self._client_identifier
 
+    def is_closed(self):
+        return self._closed
+
+    def _run_keepalive_loop(self):
+        while not self._stop_event.wait(self._heartbeat_interval_ms / 1000.0):
+            if self._closed:
+                return
+
+            if (time.monotonic() - self._last_successful_response) * 1000 > self._session_timeout_ms:
+                log.warning(
+                    "Oxia session expired locally due to missing keepalive responses",
+                    extra={"shard": self._shard, "session_id": self._session_id},
+                )
+                self.close()
+                return
+
+            try:
+                self._service_discovery.get_stub(self._shard).keep_alive(pb.SessionHeartbeat(
+                    shard=self._shard,
+                    session_id=self._session_id,
+                ))
+                self._last_successful_response = time.monotonic()
+            except Exception:
+                log.warning(
+                    "Failed to send Oxia session keepalive",
+                    exc_info=True,
+                    extra={"shard": self._shard, "session_id": self._session_id},
+                )
+
     def close(self):
-        self._service_discovery.get_stub(self._shard).close_session(pb.CloseSessionRequest(
-            shard=self._shard,
-            session_id=self._session_id,
-        ))
+        with self._close_lock:
+            if self._closed:
+                return
+            self._closed = True
+            self._stop_event.set()
+
+        try:
+            self._service_discovery.get_stub(self._shard).close_session(pb.CloseSessionRequest(
+                shard=self._shard,
+                session_id=self._session_id,
+            ))
+        except Exception:
+            log.debug(
+                "Ignoring Oxia close_session error",
+                exc_info=True,
+                extra={"shard": self._shard, "session_id": self._session_id},
+            )
+
+        if self._on_close is not None:
+            self._on_close(self)
+
+        if threading.current_thread() is not self._heartbeat_thread:
+            self._heartbeat_thread.join(timeout=self._heartbeat_interval_ms / 1000.0 + 1.0)
 
 
 class SessionManager:
@@ -57,17 +123,24 @@ class SessionManager:
     def get_session(self, shard: int) -> Session:
         with self.lock:
             s = self.sessions_by_shard.get(shard)
-            if s is None:
-                s = Session(shard, self._client_identifier, self._service_discovery,  self._session_timeout_ms)
+            if s is None or s.is_closed():
+                s = Session(
+                    shard,
+                    self._client_identifier,
+                    self._service_discovery,
+                    self._session_timeout_ms,
+                    on_close=self.on_session_closed,
+                )
                 self.sessions_by_shard[shard] = s
             return s
 
     def on_session_closed(self, session: Session):
         with self.lock:
-            del self.sessions_by_shard[session.shard_id()]
+            self.sessions_by_shard.pop(session.shard_id(), None)
 
     def close(self):
         with self.lock:
-            for s in self.sessions_by_shard.values():
-                s.close()
+            sessions = list(self.sessions_by_shard.values())
             self.sessions_by_shard.clear()
+        for s in sessions:
+            s.close()
