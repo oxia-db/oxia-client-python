@@ -36,9 +36,6 @@ def _resolve_heartbeat_interval_ms(session_timeout_ms: int,
     so that the keepalive loop always gets a chance to run before the local
     expiry check fires.
     """
-    if session_timeout_ms < 2:
-        raise ValueError("session_timeout_ms must be at least 2")
-
     if heartbeat_interval_ms is not None:
         if heartbeat_interval_ms <= 0:
             raise ValueError("heartbeat_interval_ms must be greater than zero")
@@ -47,9 +44,17 @@ def _resolve_heartbeat_interval_ms(session_timeout_ms: int,
                 "heartbeat_interval_ms must be smaller than session_timeout_ms")
         return heartbeat_interval_ms
 
+    # The default cadence uses a 2s floor, so the session timeout has to be at
+    # least that long for the default to fit at all. Callers who want tighter
+    # timeouts can still get them by passing an explicit heartbeat_interval_ms.
+    if session_timeout_ms < _DEFAULT_HEARTBEAT_FLOOR_MS:
+        raise ValueError(
+            f"session_timeout_ms must be at least {_DEFAULT_HEARTBEAT_FLOOR_MS}ms "
+            f"when heartbeat_interval_ms is not provided (got {session_timeout_ms})")
+
     # Aim for roughly 10 heartbeats per timeout window, floored so we never
     # hammer the server on very large timeouts, and capped strictly below the
-    # session timeout so short timeouts still get at least one heartbeat.
+    # session timeout to cover the edge case where the floor meets the timeout.
     default = max(session_timeout_ms // 10, _DEFAULT_HEARTBEAT_FLOOR_MS)
     return min(default, session_timeout_ms - 1)
 

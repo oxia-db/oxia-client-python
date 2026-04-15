@@ -85,9 +85,9 @@ def test_resolve_heartbeat_interval_default_is_floored_at_two_seconds():
 
 
 def test_resolve_heartbeat_interval_caps_below_session_timeout():
-    # 2s floor would exceed the timeout; must be capped strictly below it.
-    assert _resolve_heartbeat_interval_ms(1_000, None) == 999
-    assert _resolve_heartbeat_interval_ms(500, None) == 499
+    # At the floor boundary, the default (2000) collides with the timeout and
+    # must be clamped strictly below it.
+    assert _resolve_heartbeat_interval_ms(2_000, None) == 1_999
 
 
 def test_resolve_heartbeat_interval_accepts_explicit_values():
@@ -95,8 +95,20 @@ def test_resolve_heartbeat_interval_accepts_explicit_values():
     assert _resolve_heartbeat_interval_ms(30_000, 500) == 500
 
 
+def test_resolve_heartbeat_interval_allows_small_timeouts_with_explicit_interval():
+    # The 2000ms default floor only applies to the default path. When the
+    # caller provides an explicit interval the floor must not get in the way,
+    # so that tests and advanced users can drive tight timing deterministically.
+    assert _resolve_heartbeat_interval_ms(100, 10) == 10
+    assert _resolve_heartbeat_interval_ms(500, 50) == 50
+    assert _resolve_heartbeat_interval_ms(1_000, 999) == 999
+
+
 def test_resolve_heartbeat_interval_rejects_invalid_inputs():
-    with pytest.raises(ValueError, match="session_timeout_ms must be at least"):
+    # Too-small timeout is only rejected when we're asked to pick the default.
+    with pytest.raises(ValueError, match=r"session_timeout_ms must be at least 2000ms"):
+        _resolve_heartbeat_interval_ms(1_999, None)
+    with pytest.raises(ValueError, match=r"session_timeout_ms must be at least 2000ms"):
         _resolve_heartbeat_interval_ms(1, None)
     with pytest.raises(ValueError, match="heartbeat_interval_ms must be greater than zero"):
         _resolve_heartbeat_interval_ms(100, 0)
