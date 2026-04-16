@@ -16,47 +16,49 @@ from abc import ABC
 from enum import Enum
 from typing import Iterator
 
+
 class NotificationType(Enum):
-    """NotificationType represents the type of the notification event."""
+    """The type of a notification event."""
 
     KEY_CREATED = 0  #: A record that didn't exist was created.
-    KEY_MODIFIED = 1 #: An existing record was modified.
-    KEY_DELETED = 2 #: A record was deleted.
-    KEY_RANGE_DELETED = 3 #: A range of keys was deleted.
+    KEY_MODIFIED = 1  #: An existing record was modified.
+    KEY_DELETED = 2  #: A record was deleted.
+    KEY_RANGE_DELETED = 3  #: A range of keys was deleted.
 
 
 class Notification:
-    """Notification represents one change in the Oxia database."""
+    """A single change event in the Oxia database."""
 
     def notification_type(self) -> NotificationType:
-        """The type of the modification"""
+        """The type of the modification."""
         return self._type
 
     def key(self) -> str:
-        """The Key of the record to which the notification is referring"""
+        """The key of the record that was changed."""
         return self._key
 
     def version_id(self) -> int:
-        """The current VersionId of the record, or -1 for a KeyDeleted event"""
+        """The current version ID of the record, or ``0`` for a delete event."""
         return self._version_id
 
     def key_range_end(self) -> str:
-        """In case of a KeyRangeRangeDeleted notification, this would represent
-	      the end (excluded) of the range of keys"""
+        """For a L{KEY_RANGE_DELETED} notification, the end (exclusive) of
+        the deleted key range. ``None`` for other notification types."""
         return self._key_range_end
 
     def __str__(self):
-        return f"Notification(key: {self.key()}, type: {self.notification_type()}, version_id: {self.version_id()}, key_range_end: {self.key_range_end()})"
+        return (f"Notification(key={self.key()!r}, type={self.notification_type()}, "
+                f"version_id={self.version_id()}, key_range_end={self.key_range_end()!r})")
 
 
 class SequenceUpdates(Iterator[str], ABC):
-    """
-    Represents an iterable sequence of key updates that can be closed when the caller is done.
+    """An iterator over sequential key updates.
+
+    Yields the latest key each time the sequence advances. Multiple
+    updates may be collapsed into a single event with the highest
+    sequence. Call L{close} when done to release server-side resources.
     """
 
     def close(self):
-        """
-        Close the iterator and release any resources.
-        """
+        """Close the subscription and release resources."""
         pass
-
