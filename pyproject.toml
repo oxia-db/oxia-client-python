@@ -16,7 +16,7 @@
 name = "oxia"
 description = "Oxia client for Python"
 authors = [
-    { name = "StreamNative"}
+    { name = "The Oxia Authors"}
 ]
 dynamic = ["version"]
 
