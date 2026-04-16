@@ -44,7 +44,8 @@ class Shard:
 
 class ServiceDiscovery(object):
 
-    def __init__(self, service_address, connection_pool, namespace):
+    def __init__(self, service_address, connection_pool, namespace,
+                 init_timeout=30):
         self._assignments = {}
         self._service_address = service_address
         self._connection_pool = connection_pool
@@ -57,7 +58,13 @@ class ServiceDiscovery(object):
 
         # Wait until we have the first assignment map
         self._init_barrier = threading.Barrier(2)
-        self._init_barrier.wait(30)
+        try:
+            self._init_barrier.wait(init_timeout)
+        except threading.BrokenBarrierError:
+            raise RuntimeError(
+                f"Timed out after {init_timeout}s waiting for initial shard "
+                f"assignments from {service_address}"
+            ) from None
 
     def get_assignments(self):
         stub = self._connection_pool.get(self._service_address)
