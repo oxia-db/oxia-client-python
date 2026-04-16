@@ -181,7 +181,7 @@ class Client:
             ephemeral: bool = False,
             sequence_keys_deltas: list[int] = None,
             secondary_indexes: dict[str, str] = None,
-            ) -> (str, Version):
+            ) -> tuple[str, Version]:
         """
         Associates a value with a key
 
@@ -302,7 +302,7 @@ class Client:
             comparison_type: ComparisonType = ComparisonType.EQUAL,
             include_value: bool = True,
             use_index: str = None,
-            ) -> (str, str, Version):
+            ) -> tuple[str, bytes, Version]:
         """
         Returns the value associated with the specified key.
 
@@ -348,7 +348,7 @@ class Client:
                           key: str,
                           comparison_type: ComparisonType,
                           include_value: bool,
-                          use_index: str) -> (str, str, Version):
+                          use_index: str) -> tuple[str, bytes, Version]:
         gr = pb.GetRequest(key=key,
                            comparison_type=comparison_type,
                            include_value=include_value,
@@ -404,7 +404,7 @@ class Client:
                    max_key_exclusive: str,
                    partition_key: str = None,
                    use_index: str = None,
-                   ) -> Iterator[tuple[str, str, Version]]:
+                   ) -> Iterator[tuple[str, bytes, Version]]:
         """
         perform a scan for existing records with any keys within the specified range.
 
@@ -429,7 +429,7 @@ class Client:
 
     @staticmethod
     def _range_scan_single_shard(shard, stub, min_key_inclusive: str, max_key_exclusive: str, use_index: str) \
-                            -> Iterator[tuple[str, str, Version]]:
+                            -> Iterator[tuple[str, bytes, Version]]:
         it = stub.range_scan(pb.RangeScanRequest(shard=shard,
                             start_inclusive=min_key_inclusive,
                             end_exclusive=max_key_exclusive,
