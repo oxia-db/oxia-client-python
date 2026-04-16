@@ -12,7 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from abc import ABC
 from enum import Enum
+from typing import Iterator
 
 class NotificationType(Enum):
     """NotificationType represents the type of the notification event."""
@@ -45,4 +47,16 @@ class Notification:
 
     def __str__(self):
         return f"Notification(key: {self.key()}, type: {self.notification_type()}, version_id: {self.version_id()}, key_range_end: {self.key_range_end()})"
+
+
+class SequenceUpdates(Iterator[str], ABC):
+    """
+    Represents an iterable sequence of key updates that can be closed when the caller is done.
+    """
+
+    def close(self):
+        """
+        Close the iterator and release any resources.
+        """
+        pass
 
