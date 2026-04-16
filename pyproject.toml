@@ -45,6 +45,11 @@ requires = [
 ]
 build-backend = "hatchling.build"
 
+[tool.pytest.ini_options]
+filterwarnings = [
+    "ignore:The @wait_container_is_ready decorator is deprecated:DeprecationWarning",
+]
+
 [tool.hatch.version]
 source = "vcs"
 
