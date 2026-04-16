@@ -12,12 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import grpc
+import logging
 
 from oxia.internal.proto.io.streamnative.oxia import proto as pb
 from oxia.internal.backoff import Backoff
 
 import threading
 import xxhash
+
+log = logging.getLogger(__name__)
 
 class HashRange:
     def __init__(self, r: pb.Int32HashRange):
@@ -79,7 +82,7 @@ class ServiceDiscovery(object):
             except grpc.RpcError as e:
                 if not self._closed:
                     if e.code() != grpc.StatusCode.CANCELLED:
-                        print("Failed to get assignments", e)
+                        log.warning("Failed to get assignments: %s", e)
                     backoff.wait_next()
 
     def _parse_assignments(self, assignments):
@@ -92,13 +95,11 @@ class ServiceDiscovery(object):
             for s in assignments.assignments:
                 a = Shard(s.shard, s.leader, HashRange(s.int32_hash_range))
                 self._assignments[a.shard] = a
-                # print("New assignment", a)
         finally:
             self._lock.release()
 
     def get_shard(self, key: str) -> Shard:
         h = xxhash.xxh64(key).intdigest() & 0x00000000FFFFFFFF
-        # print(f"Hash for key {key} is {h:#010x}")
 
         with self._lock:
             for s in self._assignments.values():
