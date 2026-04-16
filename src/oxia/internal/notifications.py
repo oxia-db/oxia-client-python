@@ -15,14 +15,20 @@
 from oxia.internal.service_discovery import ServiceDiscovery
 from oxia.internal.backoff import Backoff
 import grpc
-import threading, queue, logging
+import threading
+import queue
+import logging
+
 from oxia.internal.proto.io.streamnative.oxia import proto as pb
 from oxia.defs import Notification, NotificationType
 
+log = logging.getLogger(__name__)
+
 _SHUTDOWN = object()
 
+
 class Notifications:
-    def __init__(self, service_discovery : ServiceDiscovery):
+    def __init__(self, service_discovery: ServiceDiscovery):
         self._lock = threading.Lock()
         self._service_discovery = service_discovery
         self._closed = False
@@ -30,68 +36,98 @@ class Notifications:
         self._last_notification = {}
         self._threads = []
         self._streams = []
-        self._get_notifications_with_retries()
+
+        self._ready = threading.Event()
+        self._coordinator = threading.Thread(
+            target=self._coordinator_loop, daemon=True,
+            name="oxia-notifications-coordinator")
+        self._coordinator.start()
+
+        if not self._ready.wait(timeout=30):
+            raise RuntimeError(
+                "Timed out waiting for initial notification streams")
 
     def close(self):
         self._closed = True
-        with self._lock:
-            for stream in self._streams:
-                stream.cancel()
-
-        # Join threads OUTSIDE the lock — workers acquire _lock to
-        # update _last_notification after each batch, so joining under
-        # the lock deadlocks when a worker is mid-update.
-        for thread in self._threads:
-            thread.join()
+        self._teardown_workers()
+        self._coordinator.join(timeout=5.0)
         self._notifications.put(_SHUTDOWN)
 
+    def _teardown_workers(self):
+        """Cancel all streams then join all worker threads.
 
-    def _get_notifications_with_retries(self):
+        Cancels under the lock so no new batches arrive, then joins
+        OUTSIDE the lock so workers can finish their lock-holding
+        updates without deadlocking.
+        """
+        with self._lock:
+            streams = list(self._streams)
+            self._streams = []
+        for stream in streams:
+            stream.cancel()
+        threads = self._threads
+        self._threads = []
+        for thread in threads:
+            thread.join()
+
+    def _coordinator_loop(self):
         backoff = Backoff()
-
         while not self._closed:
-            failed_condition = threading.Condition(self._lock)
-
-
+            failed_event = threading.Event()
             try:
-                self._lock.acquire()
-
                 all_shards = self._service_discovery.get_all_shards()
-                first_notification_barrier = threading.Barrier(len(all_shards) + 1)
-                self._lock.release()
+                barrier = threading.Barrier(len(all_shards) + 1)
 
+                threads = []
+                streams = []
                 for shard, stub in all_shards:
                     stream = stub.get_notifications(pb.NotificationsRequest(
                         shard=shard,
-                        start_offset_exclusive=self._last_notification.get(shard)
+                        start_offset_exclusive=self._last_notification.get(shard),
                     ))
-                    thread = threading.Thread(target=self._fetch_notifications_in_thread,
-                                      args=(stream, first_notification_barrier, failed_condition),
-                                      daemon=True)
-                    self._threads.append(thread)
-                    self._streams.append(stream)
-                    thread.start()
+                    t = threading.Thread(
+                        target=self._worker,
+                        args=(stream, barrier, failed_event),
+                        daemon=True,
+                        name=f"oxia-notifications-{shard}",
+                    )
+                    threads.append(t)
+                    streams.append(stream)
+                    t.start()
 
-                first_notification_barrier.wait()
-                return
+                with self._lock:
+                    self._threads = threads
+                    self._streams = streams
 
-            except Exception as e:
-                logging.exception('Failed to get notifications on shard: %s', e)
-                for stream in self._streams:
-                    stream.cancel()
-                for thread in self._threads:
-                    thread.join()
+                barrier.wait()
+                self._ready.set()
+                backoff.reset()
+
+                # Block until a worker exits (stream failure or end).
+                failed_event.wait()
+                if self._closed:
+                    return
+                self._teardown_workers()
                 backoff.wait_next()
 
-    def _fetch_notifications_in_thread(self, stream, first_notification_barrier, failed_condition):
+            except threading.BrokenBarrierError:
+                # A worker failed before delivering its first batch.
+                if self._closed:
+                    return
+                self._teardown_workers()
+                backoff.wait_next()
+            except Exception:
+                if self._closed:
+                    return
+                log.exception('Failed to set up notification streams')
+                self._teardown_workers()
+                backoff.wait_next()
+
+    def _worker(self, stream, barrier, failed_event):
+        is_first = True
         try:
-            is_first = True
             for batch in stream:
-                # print(
-                #     f"Got notification batch shard={batch.shard} offset={batch.offset} ts={batch.timestamp} notifications_count={len(batch.notifications)}")
                 for k, n in batch.notifications.items():
-                    # print(
-                    #     f"Notification: {k} - type:{n.type} version_id:{n.version_id} - key_range_last:{n.key_range_last}")
                     notification = Notification()
                     notification._key = k
                     notification._type = NotificationType(n.type)
@@ -103,15 +139,23 @@ class Notifications:
                     self._last_notification[batch.shard] = batch.offset
 
                 if is_first:
-                    first_notification_barrier.wait()
+                    barrier.wait()
                     is_first = False
+        except threading.BrokenBarrierError:
+            return
         except Exception as e:
             if self._closed:
                 return
-            if isinstance(e, grpc.RpcError) and e.code() == grpc.StatusCode.CANCELLED:
-                return
-            logging.exception('Failed to get notifications: %s', e)
-
+            if not (isinstance(e, grpc.RpcError)
+                    and e.code() == grpc.StatusCode.CANCELLED):
+                log.exception('Notification worker failed: %s', e)
+        finally:
+            if is_first:
+                try:
+                    barrier.abort()
+                except threading.BrokenBarrierError:
+                    pass
+            failed_event.set()
 
     def __iter__(self):
         return self
@@ -122,4 +166,3 @@ class Notifications:
             raise StopIteration
         self._notifications.task_done()
         return i
-

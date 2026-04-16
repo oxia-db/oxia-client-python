@@ -138,6 +138,47 @@ def _drain(notifications, count, timeout=5.0):
 
 
 # ---------------------------------------------------------------------------
+# Bug #1 — reconnect after stream failure is dead code
+# ---------------------------------------------------------------------------
+
+def test_notifications_reconnect_after_stream_failure():
+    """When a per-shard notification stream fails, the Notifications object
+    must reconnect and continue delivering notifications.
+
+    Currently FAILS because the reconnect path is dead code:
+    ``failed_condition.notify_all()`` is called without the lock held
+    (RuntimeError), and even if that were fixed nobody waits on the
+    condition — so the worker thread just dies silently."""
+
+    shard = 0
+    # First stream: delivers 1 batch, then fails.
+    stream1 = FakeStream(
+        batches=[_make_batch(shard, offset=1, key="/k1")],
+        fail_with=RuntimeError("simulated stream failure"),
+    )
+    # Second stream (after reconnect): delivers 1 more batch.
+    stream2 = FakeStream(
+        batches=[_make_batch(shard, offset=2, key="/k2")],
+    )
+
+    stub = FakeStub(streams_per_shard={shard: [stream1, stream2]})
+    sd = FakeServiceDiscovery(shards_and_stubs=[(shard, stub)])
+
+    notifications = Notifications(sd)
+    try:
+        results = _drain(notifications, count=2, timeout=5.0)
+        assert len(results) == 2, (
+            f"expected 2 notifications (one from each stream), got {len(results)}: "
+            f"{[r.key() for r in results]}"
+        )
+        assert results[0].key() == "/k1"
+        assert results[0].notification_type() == NotificationType.KEY_CREATED
+        assert results[1].key() == "/k2"
+    finally:
+        notifications.close()
+
+
+#---------------------------------------------------------------------------
 # Bug #6 — close() joins threads while holding the lock → deadlock
 # ---------------------------------------------------------------------------
 
