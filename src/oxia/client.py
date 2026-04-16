@@ -37,6 +37,8 @@ def _check_status(status: pb.Status):
         raise oxia.ex.UnexpectedVersionId()
     elif status == pb.Status.SESSION_DOES_NOT_EXIST:
         raise oxia.ex.SessionNotFound()
+    else:
+        raise oxia.ex.OxiaException(f"unknown status: {status}")
 
 
 class ComparisonType(enum.IntEnum):
