@@ -14,9 +14,12 @@
 
 from oxia.internal.service_discovery import ServiceDiscovery
 from oxia.internal.backoff import Backoff
+import grpc
 import threading, queue, logging
 from oxia.internal.proto.io.streamnative.oxia import proto as pb
 from oxia.defs import Notification, NotificationType
+
+_SHUTDOWN = object()
 
 class Notifications:
     def __init__(self, service_discovery : ServiceDiscovery):
@@ -37,7 +40,7 @@ class Notifications:
 
             for thread in self._threads:
                 thread.join()
-        self._notifications.shutdown()
+        self._notifications.put(_SHUTDOWN)
 
 
     def _get_notifications_with_retries(self):
@@ -70,7 +73,7 @@ class Notifications:
                 return
 
             except Exception as e:
-                logging.exception('Failed to get notifications on shard', e)
+                logging.exception('Failed to get notifications on shard: %s', e)
                 for stream in self._streams:
                     stream.cancel()
                 for thread in self._threads:
@@ -100,9 +103,11 @@ class Notifications:
                     first_notification_barrier.wait()
                     is_first = False
         except Exception as e:
-            if not self._closed:
-                logging.exception('Failed to get notifications', e)
-                failed_condition.notify_all()
+            if self._closed:
+                return
+            if isinstance(e, grpc.RpcError) and e.code() == grpc.StatusCode.CANCELLED:
+                return
+            logging.exception('Failed to get notifications: %s', e)
 
 
     def __iter__(self):
@@ -110,6 +115,8 @@ class Notifications:
 
     def __next__(self):
         i = self._notifications.get()
+        if i is _SHUTDOWN:
+            raise StopIteration
         self._notifications.task_done()
         return i
 

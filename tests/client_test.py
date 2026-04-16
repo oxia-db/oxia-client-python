@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import functools
-import queue
 import time
 import unittest
 import uuid
@@ -125,7 +124,7 @@ class OxiaClientTestCase(unittest.TestCase):
             self.assertEqual(s4.version_id(), n.version_id())
 
             notifications.close()
-            with self.assertRaises(queue.ShutDown):
+            with self.assertRaises(StopIteration):
                 next(notifications)
 
             notifications2.close()

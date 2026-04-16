@@ -20,6 +20,9 @@ from oxia.internal.service_discovery import ServiceDiscovery
 from oxia.internal.proto.io.streamnative.oxia import proto as pb
 
 
+_SHUTDOWN = object()
+
+
 class SequenceUpdatesImpl(SequenceUpdates):
     def __init__(self, service_discovery: ServiceDiscovery, prefix_key: str, partition_key: str, is_client_closed):
         self._service_discovery = service_discovery
@@ -58,12 +61,11 @@ class SequenceUpdatesImpl(SequenceUpdates):
         return self
 
     def __next__(self):
-        try:
-            i = self._queue.get()
-            self._queue.task_done()
-            return i
-        except queue.ShutDown:
+        i = self._queue.get()
+        if i is _SHUTDOWN:
             raise StopIteration
+        self._queue.task_done()
+        return i
 
     def close(self):
         with self._lock:
@@ -71,6 +73,6 @@ class SequenceUpdatesImpl(SequenceUpdates):
             if self._stream:
                 self._stream.cancel()
 
-            self._queue.shutdown()
+            self._queue.put(_SHUTDOWN)
             if self._thread != threading.current_thread():
                 self._thread.join()
