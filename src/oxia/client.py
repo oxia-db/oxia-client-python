@@ -22,8 +22,8 @@ from oxia.internal.sessions import SessionManager
 from oxia.internal.service_discovery import ServiceDiscovery
 from oxia.internal.proto.io.streamnative.oxia import proto as pb
 import oxia.ex
+import oxia.defs
 
-from abc import ABC
 import datetime
 import enum
 from typing import Iterator
@@ -134,17 +134,6 @@ class Version:
 
 EXPECTED_RECORD_DOES_NOT_EXIST = -1
 """When doing a `put()`, this value can be used to indicate that the record should not exist."""
-
-class SequenceUpdates(Iterator[str], ABC):
-    """
-    Represents an iterable sequence of key updates that can be closed when the caller is done.
-    """
-
-    def close(self):
-        """
-        Close the iterator and release any resources.
-        """
-        pass
 
 
 class Client:
@@ -438,7 +427,7 @@ class Client:
             for x in res.records:
                 yield x.key, x.value, _get_version(x.version)
 
-    def get_sequence_updates(self, prefix_key: str, partition_key: str = None) -> SequenceUpdates:
+    def get_sequence_updates(self, prefix_key: str, partition_key: str = None) -> oxia.defs.SequenceUpdates:
         """
         Subscribe to the updates happening on a sequential key.
 
