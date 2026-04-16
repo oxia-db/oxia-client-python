@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import logging
 import threading, queue
 import grpc
 
@@ -19,6 +20,8 @@ from oxia.defs import SequenceUpdates
 from oxia.internal.service_discovery import ServiceDiscovery
 from oxia.internal.proto.io.streamnative.oxia import proto as pb
 
+
+log = logging.getLogger(__name__)
 
 _SHUTDOWN = object()
 
@@ -55,7 +58,7 @@ class SequenceUpdatesImpl(SequenceUpdates):
                     self._queue.put(i.highest_sequence_key)
             except grpc.RpcError as e:
                 if e.code() != grpc.StatusCode.CANCELLED:
-                    print(f'Exception while getting sequence updates: {e}')
+                    log.warning('Exception while getting sequence updates: %s', e)
 
     def __iter__(self):
         return self
