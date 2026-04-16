@@ -35,8 +35,11 @@ class Notifications:
             for stream in self._streams:
                 stream.cancel()
 
-            for thread in self._threads:
-                thread.join()
+        # Join threads OUTSIDE the lock — workers acquire _lock to
+        # update _last_notification after each batch, so joining under
+        # the lock deadlocks when a worker is mid-update.
+        for thread in self._threads:
+            thread.join()
         self._notifications.shutdown()
 
 
