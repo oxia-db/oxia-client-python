@@ -18,6 +18,8 @@ from types import SimpleNamespace
 
 import pytest
 
+from oxia.client import _get_version
+from oxia.internal.proto.io.streamnative.oxia import proto as pb
 from oxia.internal.sessions import (
     Session,
     SessionManager,
@@ -265,3 +267,37 @@ def test_session_manager_close_shuts_down_all_sessions():
     assert s2.is_closed()
     assert {entry[0] for entry in stub.closed} == {3, 5}
     assert manager.sessions_by_shard == {}
+
+
+def _make_pb_version(**overrides):
+    """Build a synthetic pb.Version for unit-testing _get_version()."""
+    base = dict(
+        version_id=42,
+        modifications_count=3,
+        created_timestamp=1_000,
+        modified_timestamp=2_000,
+    )
+    base.update(overrides)
+    return pb.Version(**base)
+
+
+def test_get_version_non_ephemeral_record_has_no_session():
+    v = _get_version(_make_pb_version())
+    assert v.is_ephemeral() is False
+    assert v.session_id() is None
+    assert v.client_identity() is None
+
+
+def test_get_version_ephemeral_record_with_nonzero_session_id():
+    v = _get_version(_make_pb_version(session_id=7, client_identity="alice"))
+    assert v.is_ephemeral() is True
+    assert v.session_id() == 7
+    assert v.client_identity() == "alice"
+
+
+def test_get_version_ephemeral_record_with_session_id_zero():
+    """Regression guard for is_ephemeral(): must check `is not None`, not
+    truthiness. A session ID of 0 is still a valid ephemeral session."""
+    v = _get_version(_make_pb_version(session_id=0))
+    assert v.is_ephemeral() is True
+    assert v.session_id() == 0
