@@ -22,28 +22,54 @@ If you have questions regarding Oxia, feel free to start a new discussion: https
    useful to help troubleshoot it (e.g. OS environment, configuration,
    etc...). Also state the current behavior vs. the expected behavior.
 1. If you'd like to see a feature or an enhancement please create a new [idea
-   discussion](https://github.com/oxia-db/oxia/discussions/new?category=ideas) with 
+   discussion](https://github.com/oxia-db/oxia/discussions/new?category=ideas) with
    a clear title and description of what the feature is and why it would be
    beneficial to the project and its users.
 
+## Development setup
+
+Requirements:
+
+* Python 3.10+
+* [uv](https://docs.astral.sh/uv/) (package manager)
+* Docker (for integration tests via testcontainers)
+
+Install dependencies:
+
+```bash
+uv sync
+```
+
+## Running tests
+
+```bash
+# All tests (unit + integration — requires Docker)
+uv run pytest
+
+# Unit tests only (no Docker needed)
+uv run pytest tests/compare_test.py tests/sessions_test.py
+
+# With coverage
+uv run pytest --cov --cov-report=term-missing
+```
+
+## Regenerating protobuf bindings
+
+If the Oxia proto definitions change:
+
+```bash
+./gen-proto.sh
+```
+
 ## Submitting changes
 
-<!--
-1. CLA: Upon submitting a Pull Request (PR), contributors will be prompted to
-   sign a CLA. Please sign the CLA :slightly_smiling_face:
-   -->
-1. Tests: If you are submitting code, please ensure you have adequate tests
-   for the feature. Tests can be run via `make test`.
-1. Since this is golang project, ensure the new code is properly formatted to
-   ensure code consistency. Run `make lint`.
-
-### Quick steps to contribute
-
 1. Fork the project.
-1. Download your fork to your PC (`git clone https://github.com/your_username/oxia && cd oxia`)
+1. Clone your fork (`git clone https://github.com/your_username/oxia-client-python && cd oxia-client-python`)
 1. Create your feature branch (`git checkout -b my-new-feature`)
-1. Make changes and run tests (`make test`)
-1. Add them to staging (`git add .`)
-1. Commit your changes (`git commit -m 'Add some feature'`)
+1. Make changes and run tests (`uv run pytest`)
+1. Commit your changes with DCO sign-off (`git commit -s -m 'Add some feature'`)
 1. Push to the branch (`git push origin my-new-feature`)
-1. Create new pull request
+1. Create a new pull request
+
+**Note:** All commits must include a
+[DCO sign-off](https://developercertificate.org/) (`git commit -s`).
