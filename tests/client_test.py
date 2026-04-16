@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import queue
 import unittest
 
 import oxia
@@ -122,7 +121,7 @@ class OxiaClientTestCase(unittest.TestCase):
             self.assertEqual(s4.version_id(), n.version_id())
 
             notifications.close()
-            with self.assertRaises(queue.ShutDown):
+            with self.assertRaises(StopIteration):
                 next(notifications)
 
             notifications2.close()

@@ -18,6 +18,8 @@ import threading, queue, logging
 from oxia.internal.proto.io.streamnative.oxia import proto as pb
 from oxia.defs import Notification, NotificationType
 
+_SHUTDOWN = object()
+
 class Notifications:
     def __init__(self, service_discovery : ServiceDiscovery):
         self._lock = threading.Lock()
@@ -37,7 +39,7 @@ class Notifications:
 
             for thread in self._threads:
                 thread.join()
-        self._notifications.shutdown()
+        self._notifications.put(_SHUTDOWN)
 
 
     def _get_notifications_with_retries(self):
@@ -110,6 +112,8 @@ class Notifications:
 
     def __next__(self):
         i = self._notifications.get()
+        if i is _SHUTDOWN:
+            raise StopIteration
         self._notifications.task_done()
         return i
 
