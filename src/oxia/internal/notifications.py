@@ -24,6 +24,8 @@ from oxia.defs import Notification, NotificationType
 
 log = logging.getLogger(__name__)
 
+_SHUTDOWN = object()
+
 
 class Notifications:
     def __init__(self, service_discovery: ServiceDiscovery):
@@ -49,7 +51,7 @@ class Notifications:
         self._closed = True
         self._teardown_workers()
         self._coordinator.join(timeout=5.0)
-        self._notifications.shutdown()
+        self._notifications.put(_SHUTDOWN)
 
     def _teardown_workers(self):
         """Cancel all streams then join all worker threads.
@@ -160,5 +162,7 @@ class Notifications:
 
     def __next__(self):
         i = self._notifications.get()
+        if i is _SHUTDOWN:
+            raise StopIteration
         self._notifications.task_done()
         return i
