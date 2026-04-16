@@ -33,6 +33,7 @@ dev = [
     "grpcio-tools>=1.75.1",
     "pydoctor>=25.10.1",
     "pytest>=8.4.2",
+    "pytest-cov>=7.1.0",
     "testcontainers>=4.13.1",
 ]
 
@@ -46,3 +47,10 @@ build-backend = "hatchling.build"
 
 [tool.hatch.version]
 source = "vcs"
+
+[tool.coverage.run]
+source = ["oxia"]
+omit = ["src/oxia/internal/proto/*"]
+
+[tool.coverage.report]
+show_missing = true

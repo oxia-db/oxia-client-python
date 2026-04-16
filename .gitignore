@@ -5,3 +5,5 @@ docs/api
 build
 dist
 *.egg-info
+coverage.xml
+htmlcov/
