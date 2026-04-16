@@ -175,7 +175,7 @@ class Client:
         self._service_discovery = ServiceDiscovery(service_address, self._connections, namespace)
         self._session_manager = SessionManager(self._service_discovery, session_timeout_ms, client_identifier)
 
-    def put(self, key: str, value: object,
+    def put(self, key: str, value: str | bytes,
             partition_key: str = None,
             expected_version_id: int = None,
             ephemeral: bool = False,
