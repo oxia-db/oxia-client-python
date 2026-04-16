@@ -15,6 +15,7 @@
 import threading, queue
 import grpc
 
+from oxia.defs import SequenceUpdates
 from oxia.internal.service_discovery import ServiceDiscovery
 from oxia.internal.proto.io.streamnative.oxia import proto as pb
 
@@ -22,7 +23,7 @@ from oxia.internal.proto.io.streamnative.oxia import proto as pb
 _SHUTDOWN = object()
 
 
-class SequenceUpdatesImpl:
+class SequenceUpdatesImpl(SequenceUpdates):
     def __init__(self, service_discovery: ServiceDiscovery, prefix_key: str, partition_key: str, is_client_closed):
         self._service_discovery = service_discovery
         self._queue = queue.Queue(10)

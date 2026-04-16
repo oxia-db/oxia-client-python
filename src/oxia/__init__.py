@@ -27,11 +27,11 @@ from oxia.client import (
     Version,
     EXPECTED_RECORD_DOES_NOT_EXIST,
     ComparisonType,
-    SequenceUpdates
 )
 from oxia.defs import (
     NotificationType,
     Notification,
+    SequenceUpdates,
 )
 
 __all__ = [

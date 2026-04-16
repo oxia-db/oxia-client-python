@@ -22,11 +22,22 @@ from oxia.internal.sessions import SessionManager
 from oxia.internal.service_discovery import ServiceDiscovery
 from oxia.internal.proto.io.streamnative.oxia import proto as pb
 import oxia.ex
+import oxia.defs
 
-from abc import ABC
 import datetime
 import enum
 from typing import Iterator
+
+def _coerce_value(value) -> bytes:
+    """Coerce a put() value to bytes."""
+    if isinstance(value, str):
+        return value.encode('utf-8')
+    elif isinstance(value, bytes):
+        return value
+    else:
+        raise TypeError(
+            f"value must be str or bytes, got {type(value).__name__}")
+
 
 def _check_status(status: pb.Status):
     if status == pb.Status.OK:
@@ -37,6 +48,8 @@ def _check_status(status: pb.Status):
         raise oxia.ex.UnexpectedVersionId()
     elif status == pb.Status.SESSION_DOES_NOT_EXIST:
         raise oxia.ex.SessionNotFound()
+    else:
+        raise oxia.ex.OxiaException(f"unknown status: {status}")
 
 
 class ComparisonType(enum.IntEnum):
@@ -135,17 +148,6 @@ class Version:
 EXPECTED_RECORD_DOES_NOT_EXIST = -1
 """When doing a `put()`, this value can be used to indicate that the record should not exist."""
 
-class SequenceUpdates(Iterator[str], ABC):
-    """
-    Represents an iterable sequence of key updates that can be closed when the caller is done.
-    """
-
-    def close(self):
-        """
-        Close the iterator and release any resources.
-        """
-        pass
-
 
 class Client:
     """Client is the main entry point to the Oxia Python client"""
@@ -210,8 +212,7 @@ class Client:
             if expected_version_id is not None:
                 raise oxia.ex.InvalidOptions("sequence_keys_deltas cannot be used with expected_version_id")
 
-        if type(value) is str:
-            value = bytes(str(value), encoding='utf-8')
+        value = _coerce_value(value)
 
         pr = pb.PutRequest(key=key, value=value,
                            partition_key=partition_key,
@@ -326,7 +327,7 @@ class Client:
                     results.append((k, val, version))
                 except oxia.ex.KeyNotFound:
                     pass
-            if not results: raise oxia.ex.KeyNotFound
+            if not results: raise oxia.ex.KeyNotFound()
             results.sort(key=functools.cmp_to_key(compare_tuple_with_slash))
 
             if comparison_type == ComparisonType.EQUAL or \
@@ -438,7 +439,7 @@ class Client:
             for x in res.records:
                 yield x.key, x.value, _get_version(x.version)
 
-    def get_sequence_updates(self, prefix_key: str, partition_key: str = None) -> SequenceUpdates:
+    def get_sequence_updates(self, prefix_key: str, partition_key: str = None) -> oxia.defs.SequenceUpdates:
         """
         Subscribe to the updates happening on a sequential key.
 
