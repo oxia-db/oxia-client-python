@@ -49,12 +49,5 @@ jobs:
         name: coverage-report
         path: coverage.xml
 
-    - name: Add coverage to PR comment
-      if: github.event_name == 'pull_request'
-      uses: orgoro/coverage@v3.2
-      with:
-        coverageFile: coverage.xml
-        token: ${{ secrets.GITHUB_TOKEN }}
-
     - name: Verify documentation
       run: uv run pydoctor --config pydoctor.ini

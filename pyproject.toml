@@ -54,3 +54,4 @@ omit = ["src/oxia/internal/proto/*"]
 
 [tool.coverage.report]
 show_missing = true
+fail_under = 90
