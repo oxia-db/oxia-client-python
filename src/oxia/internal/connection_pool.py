@@ -12,25 +12,30 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import threading
+
 import grpc
 from oxia.internal.proto.io.streamnative.oxia.proto import OxiaClientStub
+
 
 class ConnectionPool:
 
     def __init__(self):
+        self._lock = threading.Lock()
         self.connections = {}
 
     def get(self, address) -> OxiaClientStub:
-        x = self.connections.get(address)
-        if x is None:
-            channel = grpc.insecure_channel(address)
-            stub = OxiaClientStub(channel)
-            x = (channel, stub)
-            self.connections[address] = x
-
-        return x[1]
-
+        with self._lock:
+            x = self.connections.get(address)
+            if x is None:
+                channel = grpc.insecure_channel(address)
+                stub = OxiaClientStub(channel)
+                x = (channel, stub)
+                self.connections[address] = x
+            return x[1]
 
     def close(self):
-        for c in self.connections.values():
-            c[0].close()
+        with self._lock:
+            for c in self.connections.values():
+                c[0].close()
+            self.connections.clear()
