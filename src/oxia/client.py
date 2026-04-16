@@ -28,6 +28,17 @@ import datetime
 import enum
 from typing import Iterator
 
+def _coerce_value(value) -> bytes:
+    """Coerce a put() value to bytes."""
+    if isinstance(value, str):
+        return value.encode('utf-8')
+    elif isinstance(value, bytes):
+        return value
+    else:
+        raise TypeError(
+            f"value must be str or bytes, got {type(value).__name__}")
+
+
 def _check_status(status: pb.Status):
     if status == pb.Status.OK:
         pass
@@ -201,8 +212,7 @@ class Client:
             if expected_version_id is not None:
                 raise oxia.ex.InvalidOptions("sequence_keys_deltas cannot be used with expected_version_id")
 
-        if type(value) is str:
-            value = bytes(str(value), encoding='utf-8')
+        value = _coerce_value(value)
 
         pr = pb.PutRequest(key=key, value=value,
                            partition_key=partition_key,
@@ -317,7 +327,7 @@ class Client:
                     results.append((k, val, version))
                 except oxia.ex.KeyNotFound:
                     pass
-            if not results: raise oxia.ex.KeyNotFound
+            if not results: raise oxia.ex.KeyNotFound()
             results.sort(key=functools.cmp_to_key(compare_tuple_with_slash))
 
             if comparison_type == ComparisonType.EQUAL or \
