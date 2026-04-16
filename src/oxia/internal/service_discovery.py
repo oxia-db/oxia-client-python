@@ -114,7 +114,7 @@ class ServiceDiscovery(object):
                     return self._connection_pool.get(s.leader)
         raise Exception(f'No stub found for shard {shard}')
 
-    def get_leader(self, key: str, partition_key: str) -> (int, pb.OxiaClientStub):
+    def get_leader(self, key: str, partition_key: str) -> tuple[int, pb.OxiaClientStub]:
         hashing_key = partition_key if partition_key else key
         s = self.get_shard(hashing_key)
         return s.shard, self._connection_pool.get(s.leader)
