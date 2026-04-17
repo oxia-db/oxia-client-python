@@ -151,18 +151,27 @@ class Client:
                  namespace: str = "default",
                  session_timeout_ms: int = 30_000,
                  client_identifier: str = None,
+                 tls: bool = False,
                  ):
         """Create a new Oxia client.
 
-        @param service_address: Oxia service address (``host:port``).
+        @param service_address: Oxia service address (``host:port`` or
+            ``tls://host:port``). Prefixing with ``tls://`` is
+            equivalent to passing ``tls=True``.
         @param namespace: Oxia namespace. Default is ``"default"``.
         @param session_timeout_ms: Session timeout in milliseconds for
             ephemeral records. Default is 30 000 ms.
         @param client_identifier: Optional client identity string. If
             ``None``, a random UUID is generated.
+        @param tls: If ``True``, use a TLS-encrypted gRPC channel. The
+            system trust store is used to verify server certificates.
+            Default is ``False`` (insecure channel).
         """
         self._closed = False
-        self._connections = ConnectionPool()
+        if service_address.startswith("tls://"):
+            service_address = service_address[len("tls://"):]
+            tls = True
+        self._connections = ConnectionPool(tls=tls)
         self._service_discovery = ServiceDiscovery(service_address, self._connections, namespace)
         self._session_manager = SessionManager(self._service_discovery, session_timeout_ms, client_identifier)
 
