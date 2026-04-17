@@ -13,22 +13,30 @@
 # limitations under the License.
 
 import threading
+from typing import Optional
 
 import grpc
+from oxia.internal.interceptors import RequestTimeoutInterceptor
 from oxia.internal.proto.io.streamnative.oxia.proto import OxiaClientStub
 
 
 class ConnectionPool:
 
-    def __init__(self):
+    def __init__(self, request_timeout_ms: Optional[int] = None):
         self._lock = threading.Lock()
         self.connections = {}
+        self._interceptors = []
+        if request_timeout_ms is not None:
+            self._interceptors.append(
+                RequestTimeoutInterceptor(request_timeout_ms / 1000.0))
 
     def get(self, address) -> OxiaClientStub:
         with self._lock:
             x = self.connections.get(address)
             if x is None:
                 channel = grpc.insecure_channel(address)
+                if self._interceptors:
+                    channel = grpc.intercept_channel(channel, *self._interceptors)
                 stub = OxiaClientStub(channel)
                 x = (channel, stub)
                 self.connections[address] = x
