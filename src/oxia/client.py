@@ -151,6 +151,7 @@ class Client:
                  namespace: str = "default",
                  session_timeout_ms: int = 30_000,
                  client_identifier: str = None,
+                 request_timeout_ms: int = 30_000,
                  ):
         """Create a new Oxia client.
 
@@ -160,9 +161,15 @@ class Client:
             ephemeral records. Default is 30 000 ms.
         @param client_identifier: Optional client identity string. If
             ``None``, a random UUID is generated.
+        @param request_timeout_ms: Deadline for each unary/finite RPC
+            (``put``, ``delete``, ``get``, ``list``, ``range_scan``,
+            session management). Long-lived streams (notifications,
+            sequence updates, shard assignments) are not bounded.
+            Default is 30 000 ms. A ``grpc.RpcError`` with
+            ``StatusCode.DEADLINE_EXCEEDED`` is raised on timeout.
         """
         self._closed = False
-        self._connections = ConnectionPool()
+        self._connections = ConnectionPool(request_timeout_ms=request_timeout_ms)
         self._service_discovery = ServiceDiscovery(service_address, self._connections, namespace)
         self._session_manager = SessionManager(self._service_discovery, session_timeout_ms, client_identifier)
 
