@@ -16,19 +16,26 @@ import threading
 from typing import Optional
 
 import grpc
-from oxia.internal.interceptors import RequestTimeoutInterceptor
+from oxia.defs import Authentication
+from oxia.internal.interceptors import (
+    AuthenticationInterceptor,
+    RequestTimeoutInterceptor,
+)
 from oxia.internal.proto.io.streamnative.oxia.proto import OxiaClientStub
 
 
 class ConnectionPool:
 
-    def __init__(self, request_timeout_ms: Optional[int] = None):
+    def __init__(self, request_timeout_ms: Optional[int] = None,
+                 authentication: Optional[Authentication] = None):
         self._lock = threading.Lock()
         self.connections = {}
         self._interceptors = []
         if request_timeout_ms is not None:
             self._interceptors.append(
                 RequestTimeoutInterceptor(request_timeout_ms / 1000.0))
+        if authentication is not None:
+            self._interceptors.append(AuthenticationInterceptor(authentication))
 
     def get(self, address) -> OxiaClientStub:
         with self._lock:

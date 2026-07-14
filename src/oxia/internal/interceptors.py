@@ -16,6 +16,8 @@
 
 import grpc
 
+from oxia.defs import Authentication
+
 # Server streaming RPCs that are long-lived and should NOT carry a
 # request timeout (they stay open for the lifetime of the client
 # subscription).
@@ -50,3 +52,29 @@ class RequestTimeoutInterceptor(
 
     def intercept_unary_stream(self, continuation, client_call_details, request):
         return continuation(self._with_timeout(client_call_details), request)
+
+
+class AuthenticationInterceptor(
+    grpc.UnaryUnaryClientInterceptor,
+    grpc.UnaryStreamClientInterceptor,
+):
+    """Attach the credentials produced by an L{oxia.defs.Authentication}
+    implementation to every outgoing RPC as gRPC metadata headers."""
+
+    def __init__(self, authentication: Authentication):
+        self._authentication = authentication
+
+    def _with_auth(self, client_call_details):
+        credentials = self._authentication.generate_credentials()
+        if not credentials:
+            return client_call_details
+        metadata = list(client_call_details.metadata or [])
+        for k, v in credentials.items():
+            metadata.append((k.lower(), v))
+        return client_call_details._replace(metadata=metadata)
+
+    def intercept_unary_unary(self, continuation, client_call_details, request):
+        return continuation(self._with_auth(client_call_details), request)
+
+    def intercept_unary_stream(self, continuation, client_call_details, request):
+        return continuation(self._with_auth(client_call_details), request)
