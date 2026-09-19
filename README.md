@@ -2,6 +2,7 @@
 
 [![CI](https://github.com/oxia-db/oxia-client-python/actions/workflows/run-tests.yaml/badge.svg)](https://github.com/oxia-db/oxia-client-python/actions/workflows/run-tests.yaml)
 [![License](https://img.shields.io/badge/license-Apache%202.0-white.svg)](https://github.com/oxia-db/oxia-client-python/blob/main/LICENSE)
+[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Foxia-db%2Foxia-client-python.svg?type=shield)](https://app.fossa.com/projects/git%2Bgithub.com%2Foxia-db%2Foxia-client-python?ref=badge_shield)
 
 Python client for [Oxia](https://oxia-db.github.io/), a scalable metadata store and coordination
 system for large-scale distributed systems.
@@ -72,3 +73,6 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup and guidelines.
 Copyright 2025 The Oxia Authors
 
 Licensed under the Apache License, Version 2.0: http://www.apache.org/licenses/LICENSE-2.0
+
+
+[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Foxia-db%2Foxia-client-python.svg?type=large)](https://app.fossa.com/projects/git%2Bgithub.com%2Foxia-db%2Foxia-client-python?ref=badge_large)
