@@ -16,7 +16,7 @@
 
 import pytest
 
-from oxia.internal.service_discovery import ServiceDiscovery
+from oxia.internal.service_discovery import ServiceDiscovery, xxh332
 
 
 class FailingStub:
@@ -40,3 +40,15 @@ def test_init_raises_on_connection_failure():
     with pytest.raises(RuntimeError, match="Timed out.*shard assignments"):
         ServiceDiscovery("localhost:99999", FailingConnectionPool(), "default",
                          init_timeout=1)
+
+
+@pytest.mark.parametrize("key, expected", [
+    ("foo", 125730186),
+    ("bar", 2687685474),
+    ("baz", 862947621),
+])
+def test_key_hash_matches_go(key, expected):
+    """Keys must hash exactly like the server and the other clients do,
+    otherwise they are routed to the wrong shard. The vectors come from the
+    Go implementation (oxia common/hash/hash_test.go)."""
+    assert xxh332(key) == expected

@@ -986,6 +986,42 @@ class OxiaClientTestCase(unittest.TestCase):
             finally:
                 client.close()
 
+    def test_shard_routing_matches_go_client(self):
+        """Records must be routed to the same shard as the Go client does,
+        otherwise on a multi-shard namespace the records written by one
+        client are invisible to the other. The Go CLI shipped in the server
+        image is used as the reference."""
+        with OxiaContainer(shards=10) as server:
+            client = oxia.Client(server.service_url())
+
+            def go_client(*args):
+                exit_code, (stdout, stderr) = server.get_wrapped_container().exec_run(
+                    ['oxia', 'client', *args], demux=True)
+                self.assertEqual(0, exit_code, f"oxia client {' '.join(args)}: {stderr}")
+                return stdout.decode().rstrip('\n')
+
+            try:
+                # Written by this client, read by the Go client
+                for k in ['foo', 'bar', 'baz', '/a/b/c', 'clé']:
+                    client.put(k, 'py:' + k)
+                    self.assertEqual('py:' + k, go_client('get', k))
+
+                # Written by the Go client, read by this client
+                for k in ['qux', 'quux', '/x/y/z', 'ключ']:
+                    go_client('put', k, 'go:' + k)
+                    _, value, _ = client.get(k)
+                    self.assertEqual(('go:' + k).encode(), value)
+
+                # Routed by partition key
+                client.put('py-pk', 'py', partition_key='foo')
+                self.assertEqual('py', go_client('get', '--partition-key', 'foo', 'py-pk'))
+
+                go_client('put', '--partition-key', 'baz', 'go-pk', 'go')
+                _, value, _ = client.get('go-pk', partition_key='baz')
+                self.assertEqual(b'go', value)
+            finally:
+                client.close()
+
 
 if __name__ == '__main__':
     unittest.main()

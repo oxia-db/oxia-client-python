@@ -22,6 +22,11 @@ import xxhash
 
 log = logging.getLogger(__name__)
 
+def xxh332(key: str) -> int:
+    """XXH3-64 truncated to 32 bits: the hash the Oxia server and all the
+    other clients use to map keys to shards (Go: common/hash.Xxh332)."""
+    return xxhash.xxh3_64_intdigest(key) & 0x00000000FFFFFFFF
+
 class HashRange:
     def __init__(self, r: pb.Int32HashRange):
         self.min_included = r.min_hash_inclusive
@@ -99,7 +104,7 @@ class ServiceDiscovery(object):
             self._lock.release()
 
     def get_shard(self, key: str) -> Shard:
-        h = xxhash.xxh64(key).intdigest() & 0x00000000FFFFFFFF
+        h = xxh332(key)
 
         with self._lock:
             for s in self._assignments.values():
