@@ -39,7 +39,9 @@ classifiers = [
 ]
 
 dependencies = [
-    "betterproto2-compiler",
+    # Generated stubs call betterproto2.check_compiler_version(), which requires
+    # the runtime major.minor to match the betterproto2-compiler that produced them.
+    "betterproto2>=0.9.0,<0.10",
     "grpcio",
     "xxhash",
 ]
@@ -52,6 +54,7 @@ Issues = "https://github.com/oxia-db/oxia-client-python/issues"
 
 [dependency-groups]
 dev = [
+    "betterproto2-compiler>=0.9.0",
     "grpcio-tools>=1.75.1",
     "pydoctor>=25.10.1",
     "pytest>=8.4.2",
