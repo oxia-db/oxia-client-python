@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from abc import ABC
+from abc import ABC, abstractmethod
 from enum import Enum
 from typing import Iterator
 
@@ -62,3 +62,22 @@ class SequenceUpdates(Iterator[str], ABC):
     def close(self):
         """Close the subscription and release resources."""
         pass
+
+
+class Authentication(ABC):
+    """Pluggable authentication for Oxia client RPCs.
+
+    Implementations return a dict of metadata entries that will be
+    attached to every outgoing RPC (e.g. ``{"authorization": "Bearer <token>"}``).
+    ``generate_credentials`` is called on every RPC, so dynamic
+    token-refresh schemes are supported by returning a fresh value each call.
+    """
+
+    @abstractmethod
+    def generate_credentials(self) -> dict[str, str]:
+        """Return the gRPC metadata to attach to each outgoing RPC.
+
+        Keys are interpreted as gRPC metadata header names (will be
+        lowercased by the transport). Values are arbitrary strings.
+        """
+        ...

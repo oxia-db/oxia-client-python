@@ -29,6 +29,7 @@ from oxia.client import (
     ComparisonType,
 )
 from oxia.defs import (
+    Authentication,
     NotificationType,
     Notification,
     SequenceUpdates,
@@ -36,6 +37,8 @@ from oxia.defs import (
 
 __all__ = [
     'ex',
+    'auth',
+    'Authentication',
     'ComparisonType',
     'Client',
     'Version',
