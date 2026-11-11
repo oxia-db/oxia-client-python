@@ -33,12 +33,25 @@ jobs:
         include:
           - target: x86_64-unknown-linux-gnu
             runner: ubuntu-latest
+            compatibility: auto
           - target: aarch64-unknown-linux-gnu
             runner: ubuntu-24.04-arm
+            compatibility: auto
+          # musl, for Alpine — which is most of the container images an Oxia
+          # client runs in. Without these a `pip install` there falls back to
+          # the source distribution and needs a Rust toolchain to get going.
+          - target: x86_64-unknown-linux-musl
+            runner: ubuntu-latest
+            compatibility: musllinux_1_2
+          - target: aarch64-unknown-linux-musl
+            runner: ubuntu-24.04-arm
+            compatibility: musllinux_1_2
           - target: x86_64-apple-darwin
             runner: macos-latest
+            compatibility: auto
           - target: aarch64-apple-darwin
             runner: macos-latest
+            compatibility: auto
 
     steps:
     - name: Checkout repository
@@ -51,7 +64,7 @@ jobs:
       uses: PyO3/maturin-action@v1
       with:
         target: ${{ matrix.target }}
-        manylinux: auto
+        manylinux: ${{ matrix.compatibility }}
         args: --release --out dist
 
     - name: Upload wheel
@@ -111,8 +124,9 @@ jobs:
             *) echo "::error::$(basename "$artifact") is not version ${version}"; exit 1 ;;
           esac
         done
-        if [ "$found" -lt 2 ]; then
-          echo "::error::expected the wheels and the sdist, found ${found} artifacts"
+        # One wheel per entry of the matrix above, plus the sdist.
+        if [ "$found" -ne 7 ]; then
+          echo "::error::expected 6 wheels and the sdist, found ${found} artifacts"
           exit 1
         fi
 

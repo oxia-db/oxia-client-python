@@ -16,9 +16,9 @@ system for large-scale distributed systems.
 ## Requirements
 
 * Python 3.10+
-* Linux (x86\_64, aarch64) or macOS (x86\_64, aarch64), for which wheels are
-  published. On any other platform, pip builds from the source distribution,
-  which needs a Rust toolchain.
+* Linux, glibc or musl (x86\_64, aarch64), or macOS (x86\_64, aarch64), for
+  which wheels are published. On any other platform, pip builds from the
+  source distribution, which needs a Rust toolchain.
 
 ## Installation
 
