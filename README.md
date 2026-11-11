@@ -1,58 +1,91 @@
+# Oxia Python Client SDK
 
-<h2 align="center">Oxia Client SDK for Python</h1>
-a robust, scalable metadata store and coordination system designed for large-scale distributed systems, with built-in support for stream index storage to optimize real-time data management.
+[![CI](https://github.com/oxia-db/oxia-client-python/actions/workflows/run-tests.yaml/badge.svg)](https://github.com/oxia-db/oxia-client-python/actions/workflows/run-tests.yaml)
+[![License](https://img.shields.io/badge/license-Apache%202.0-white.svg)](https://github.com/oxia-db/oxia-client-python/blob/main/LICENSE)
+[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Foxia-db%2Foxia-client-python.svg?type=shield)](https://app.fossa.com/projects/git%2Bgithub.com%2Foxia-db%2Foxia-client-python?ref=badge_shield)
+
+Python client for [Oxia](https://oxia-db.github.io/), a scalable metadata store and coordination
+system for large-scale distributed systems.
 
 <p align="center">
-  <a href="https://oxia-db.github.io/docs/getting-started">Getting Started </a> | <a href="https://oxia-db.github.io/">Documentation</a>
+  <a href="https://oxia-db.github.io/docs/getting-started">Getting Started</a> |
+  <a href="https://oxia-db.github.io/">Documentation</a> |
+  <a href="https://github.com/oxia-db/oxia/discussions/new/choose">Discussion</a>
 </p>
 
-<p align="center">
-  <a href="https://github.com/oxia-db/oxia-client-python/releases"><img src="https://img.shields.io/github/v/release/oxia-db/oxia" alt="Latest Release"></a>
-  <a href="https://github.com/oxia-db/oxia-client-python/actions/workflows/run-tests.yaml/badge.svg"><img src="https://github.com/oxia-db/oxia-client-python/actions/workflows/run-tests.yaml/badge.svg" alt="CI"></a>
-  <a href="https://github.com/oxia-db/oxia-client-python/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-white.svg" alt="License"></a>
-  <a href="https://github.com/oxia-db/oxia-client-python/discussions/new/choose"><img src="https://img.shields.io/badge/Github-Discussion-blue.svg?logo=refinedgithub" alt="Github Discussion"></a>
-</p>
+## Requirements
 
-<br>
+* Python 3.10+
+* Linux (x86\_64, aarch64) or macOS (x86\_64, aarch64), for which wheels are
+  published. On any other platform, pip builds from the source distribution,
+  which needs a Rust toolchain.
 
-### Installing
+## Installation
 
 ```bash
 pip install oxia
 ```
 
+## Quick start
+
 ```python
 import oxia
 
-client = oxia.Client('localhost:6648', namespace='default')
-key, version = client.put('my-key', 'my-value')
-key, value, version = client.get('my-key')
-client.close()
+with oxia.Client('localhost:6648') as client:
+    # Put a value
+    key, version = client.put('/my-key', b'my-value')
+
+    # Get it back
+    key, value, version = client.get('/my-key')
+
+    # Conditional put (only if version matches)
+    key, version = client.put('/my-key', b'new-value',
+                              expected_version_id=version.version_id())
+
+    # List keys in a range
+    keys = client.list('/my-', '/my-~')
+
+    # Delete
+    client.delete('/my-key')
 ```
 
-### How it works
+## Features
+
+- **CRUD operations**: `put`, `get`, `delete`, `delete_range`
+- **Range queries**: `list` (keys only), `range_scan` (keys + values)
+- **Conditional writes**: version-based optimistic concurrency via `expected_version_id`
+- **Ephemeral records**: session-scoped keys that are removed when the client disconnects
+- **Notifications**: subscribe to real-time change events
+- **Sequential keys**: server-assigned monotonic key suffixes
+- **Secondary indexes**: additional lookup keys on records
+- **Partition routing**: co-locate related records on the same shard via `partition_key`
+- **Floor/Ceiling/Lower/Higher lookups**: nearest-key queries
+
+For the full API reference, see the [documentation](https://oxia-db.github.io/oxia-client-python/latest/).
+
+## How it works
 
 This SDK is a binding over the [Oxia Rust
 client](https://github.com/oxia-db/oxia-client-rust), through
 [PyO3](https://pyo3.rs/): the wheel carries that client compiled in, and the
-Python package is the API over it. The client runs on a thread of its own, and
-operations from several Python threads run concurrently and batch together —
-calls release the GIL while they wait.
+Python package is the API over it, so the protocol itself lives in one place
+across the SDKs. The client runs on a thread of its own; operations from
+several Python threads run concurrently and batch together, and calls release
+the GIL while they wait.
 
-Wheels are published for Linux (x86\_64, aarch64) and macOS (x86\_64,
-aarch64), and each serves every CPython from 3.13 on. Installing from the
-source distribution instead requires a Rust toolchain.
+## Contributing
 
-<br><br>
+Please star the project if you like it!
 
-### Contributing to Oxia
+Feel free to open an [issue](https://github.com/oxia-db/oxia-client-python/issues/new)
+or start a [discussion](https://github.com/oxia-db/oxia/discussions/new/choose).
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup and guidelines.
 
-Please 🌟 star the project if you like it. 
-
-Feel free to open an [issue](https://github.com/oxia-db/oxia-client-python/issues/new) or start a [discussion](https://github.com/oxia-db/oxia/discussions/new/choose). You can also follow the development [guide]() to contribute and build on it.
-
-### License
+## License
 
 Copyright 2025 The Oxia Authors
 
 Licensed under the Apache License, Version 2.0: http://www.apache.org/licenses/LICENSE-2.0
+
+
+[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Foxia-db%2Foxia-client-python.svg?type=large)](https://app.fossa.com/projects/git%2Bgithub.com%2Foxia-db%2Foxia-client-python?ref=badge_large)

@@ -91,18 +91,20 @@ struct Client {
 #[pymethods]
 impl Client {
     #[new]
-    #[pyo3(signature = (service_address, namespace, session_timeout_ms, client_identifier=None))]
+    #[pyo3(signature = (service_address, namespace, session_timeout_ms, request_timeout_ms, client_identifier=None))]
     fn new(
         py: Python<'_>,
         service_address: String,
         namespace: String,
         session_timeout_ms: u64,
+        request_timeout_ms: u64,
         client_identifier: Option<String>,
     ) -> PyResult<Self> {
         let mut builder = OxiaClientBuilder::new()
             .service_address(service_address)
             .namespace(namespace)
-            .session_timeout(Duration::from_millis(session_timeout_ms));
+            .session_timeout(Duration::from_millis(session_timeout_ms))
+            .request_timeout(Duration::from_millis(request_timeout_ms));
         if let Some(identity) = client_identifier {
             builder = builder.identity(identity);
         }

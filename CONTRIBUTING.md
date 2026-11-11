@@ -22,24 +22,28 @@ If you have questions regarding Oxia, feel free to start a new discussion: https
    useful to help troubleshoot it (e.g. OS environment, configuration,
    etc...). Also state the current behavior vs. the expected behavior.
 1. If you'd like to see a feature or an enhancement please create a new [idea
-   discussion](https://github.com/oxia-db/oxia/discussions/new?category=ideas) with 
+   discussion](https://github.com/oxia-db/oxia/discussions/new?category=ideas) with
    a clear title and description of what the feature is and why it would be
    beneficial to the project and its users.
 
-## Building
+## Development setup
+
+Requirements:
+
+* Python 3.10+
+* [uv](https://docs.astral.sh/uv/) (package manager)
+* A Rust toolchain, to build the extension module
+* Docker (for integration tests via testcontainers)
 
 The package is a Python layer over the [Oxia Rust
 client](https://github.com/oxia-db/oxia-client-rust): `src/oxia` is the public
 API and `rust/` is the PyO3 extension module it calls, built into the wheel by
-[maturin](https://www.maturin.rs/). Building it needs a Rust toolchain
-alongside [uv](https://docs.astral.sh/uv/); the tests need Docker, which they
-use to run a standalone Oxia server.
+[maturin](https://www.maturin.rs/).
+
+Build the extension and install everything:
 
 ```bash
-uv sync                               # build the extension and install it
-uv run pytest                         # integration tests, against a container
-uv run pydoctor --config pydoctor.ini # the API documentation
-cargo fmt && cargo clippy --all-targets
+uv sync
 ```
 
 `uv sync` installs the package in editable mode: changes under `src/oxia` take
@@ -47,24 +51,37 @@ effect right away. A change to the Rust side — `rust/`, `Cargo.toml` or
 `Cargo.lock` — has to be recompiled with `uv sync --reinstall-package oxia`,
 since a plain `uv sync` can reuse the build it has cached.
 
+## Running tests
+
+The suite is integration-level: every test runs against a standalone Oxia
+server in a container, so Docker has to be running.
+
+```bash
+# The whole suite
+uv run pytest
+
+# With coverage
+uv run pytest --cov --cov-report=term-missing
+
+# The Rust side
+cargo fmt --check && cargo clippy --all-targets -- -D warnings
+```
+
+## Building the documentation
+
+```bash
+uv run pydoctor --config pydoctor.ini
+```
+
 ## Submitting changes
 
-<!--
-1. CLA: Upon submitting a Pull Request (PR), contributors will be prompted to
-   sign a CLA. Please sign the CLA :slightly_smiling_face:
-   -->
-1. Tests: If you are submitting code, please ensure you have adequate tests
-   for the feature. Tests can be run via `make test`.
-1. Since this is golang project, ensure the new code is properly formatted to
-   ensure code consistency. Run `make lint`.
-
-### Quick steps to contribute
-
 1. Fork the project.
-1. Download your fork to your PC (`git clone https://github.com/your_username/oxia && cd oxia`)
+1. Clone your fork (`git clone https://github.com/your_username/oxia-client-python && cd oxia-client-python`)
 1. Create your feature branch (`git checkout -b my-new-feature`)
-1. Make changes and run tests (`make test`)
-1. Add them to staging (`git add .`)
-1. Commit your changes (`git commit -m 'Add some feature'`)
+1. Make changes and run tests (`uv run pytest`)
+1. Commit your changes with DCO sign-off (`git commit -s -m 'Add some feature'`)
 1. Push to the branch (`git push origin my-new-feature`)
-1. Create new pull request
+1. Create a new pull request
+
+**Note:** All commits must include a
+[DCO sign-off](https://developercertificate.org/) (`git commit -s`).

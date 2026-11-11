@@ -40,7 +40,7 @@ class SequenceUpdatesIterator(Iterator[str]):
 
 class Client:
     def __init__(self, service_address: str, namespace: str, session_timeout_ms: int,
-                 client_identifier: str | None = None) -> None: ...
+                 request_timeout_ms: int, client_identifier: str | None = None) -> None: ...
     def put(self, key: str, value: bytes, partition_key: str | None = None,
             expected_version_id: int | None = None, ephemeral: bool = False,
             sequence_keys_deltas: list[int] | None = None,

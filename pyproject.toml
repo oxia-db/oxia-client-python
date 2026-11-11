@@ -14,23 +14,46 @@
 
 [project]
 name = "oxia"
-description = "Oxia client for Python"
+description = "Python client for Oxia, a scalable metadata store and coordination system"
+readme = "README.md"
+license = {text = "Apache-2.0"}
 authors = [
-    { name = "StreamNative"}
+    { name = "The Oxia Authors"}
 ]
 # Taken from the version in Cargo.toml, which the release workflow sets from
 # the tag being released.
 dynamic = ["version"]
 
-requires-python = ">=3.13"
+requires-python = ">=3.10"
+
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Database",
+    "Topic :: System :: Distributed Computing",
+]
 
 # The client itself is the native `oxia._oxia` module, built into the wheel.
 dependencies = []
+
+[project.urls]
+Homepage = "https://oxia-db.github.io/"
+Documentation = "https://oxia-db.github.io/oxia-client-python/latest/"
+Repository = "https://github.com/oxia-db/oxia-client-python"
+Issues = "https://github.com/oxia-db/oxia-client-python/issues"
 
 [dependency-groups]
 dev = [
     "pydoctor>=25.10.1",
     "pytest>=8.4.2",
+    "pytest-cov>=7.1.0",
     "testcontainers>=4.13.1",
 ]
 
@@ -44,3 +67,15 @@ module-name = "oxia._oxia"
 # `extension-module` leaves libpython to the interpreter that loads the
 # module, which is what a wheel needs.
 features = ["pyo3/extension-module"]
+
+[tool.pytest.ini_options]
+filterwarnings = [
+    "ignore:The @wait_container_is_ready decorator is deprecated:DeprecationWarning",
+]
+
+[tool.coverage.run]
+source = ["oxia"]
+
+[tool.coverage.report]
+show_missing = true
+fail_under = 90

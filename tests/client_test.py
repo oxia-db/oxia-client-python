@@ -11,11 +11,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import time
 import unittest
-
-import oxia
 import uuid
 
+import oxia
 from oxia_container import OxiaContainer
 
 
@@ -238,6 +238,12 @@ class OxiaClientTestCase(unittest.TestCase):
         with OxiaContainer(shards=10) as server:
             client = oxia.Client(server.service_url())
             k = new_key()
+
+            # The cross-shard floor/ceiling merge is the code path under
+            # test. The client no longer exposes which shard a key routes
+            # to, so the spread over the 10 shards above cannot be asserted
+            # here the way it used to be.
+
             client.put(k + "/a", '0')
             # client.put(k + "/b", '1') # Skipped intentionally
             client.put(k + "/c", '2')
@@ -707,23 +713,27 @@ class OxiaClientTestCase(unittest.TestCase):
             with self.assertRaises(oxia.ex.InvalidOptions):
                 client.get_sequence_updates("a")
 
-            # gs1 = client.get_sequence_updates("a", partition_key="x")
-            # gs1.close()
+            # Subscribe-then-immediately-close, before any data exists.
+            gs1 = client.get_sequence_updates("a", partition_key="x")
+            gs1.close()
 
             k1, _ = client.put('a', '0', sequence_keys_deltas=[1], partition_key='x')
             self.assertEqual('a-%020d' % 1, k1)
             k2, _ = client.put('a', '0', sequence_keys_deltas=[1], partition_key='x')
             self.assertEqual('a-%020d' % 2, k2)
 
-            # gs2 = client.get_sequence_updates("a", partition_key="x")
-            # self.assertEqual(k2, next(gs2))
-            # gs2.close()
+            # A fresh subscription must receive the current highest sequence as
+            # the first event (not wait for the next write).
+            gs2 = client.get_sequence_updates("a", partition_key="x")
+            self.assertEqual(k2, next(gs2))
+            gs2.close()
 
             k3, _ = client.put('a', '0', sequence_keys_deltas=[1], partition_key='x')
             self.assertEqual('a-%020d' % 3, k3)
 
-            # with self.assertRaises(StopIteration):
-            #     next(gs2)
+            # After close, the iterator must be exhausted.
+            with self.assertRaises(StopIteration):
+                next(gs2)
 
             gs3 = client.get_sequence_updates("a", partition_key="x")
             self.assertEqual(k3, next(gs3))
@@ -732,7 +742,231 @@ class OxiaClientTestCase(unittest.TestCase):
             self.assertEqual('a-%020d' % 4, k4)
             self.assertEqual(k4, next(gs3))
 
+            gs3.close()
             client.close()
+
+    def test_delete_ephemeral_after_session_closed(self):
+        """When the client that created an ephemeral record closes, the server
+        should remove the record. A second client observing the key must see
+        KeyNotFound on get and False on delete."""
+        with OxiaContainer() as server:
+            client1 = oxia.Client(server.service_url(),
+                                  session_timeout_ms=5_000,
+                                  client_identifier="client-1")
+            k = new_key()
+            _, v = client1.put(k, 'v', ephemeral=True)
+            self.assertTrue(v.is_ephemeral())
+
+            # A second client can observe the ephemeral record while client1 is alive.
+            client2 = oxia.Client(server.service_url(),
+                                  client_identifier="client-2")
+            rk, rv, _ = client2.get(k)
+            self.assertEqual(k, rk)
+            self.assertEqual(b'v', rv)
+
+            # Closing client1 closes its session; the server removes the ephemeral.
+            client1.close()
+
+            # Give the server a moment to propagate the session-scoped delete.
+            deadline = time.monotonic() + 5.0
+            while time.monotonic() < deadline:
+                try:
+                    client2.get(k)
+                except oxia.ex.KeyNotFound:
+                    break
+                time.sleep(0.05)
+            else:
+                self.fail(f"ephemeral key {k} was not removed within 5s of client close")
+
+            # delete() on a non-existent key returns False, not True, not raising.
+            self.assertFalse(client2.delete(k))
+            with self.assertRaises(oxia.ex.KeyNotFound):
+                client2.get(k)
+
+            client2.close()
+
+    def test_secondary_index_equal_get_returns_primary_key(self):
+        """Secondary-index lookups with the default (EQUAL) comparison must
+        return the primary key of the matched record — not the secondary key
+        the caller passed in."""
+        with OxiaContainer() as server:
+            client = oxia.Client(server.service_url())
+            try:
+                client.put('alpha', 'VALUE_007',
+                           secondary_indexes={'idx': '007'})
+
+                # EQUAL (default) — the returned key must be the primary key.
+                key, val, _ = client.get('007', use_index='idx')
+                self.assertEqual('alpha', key,
+                                 "returned key must be the primary key 'alpha', "
+                                 "not the secondary lookup value '007'")
+                self.assertEqual(b'VALUE_007', val)
+
+                # Explicit EQUAL, same expectation.
+                key, val, _ = client.get(
+                    '007', use_index='idx',
+                    comparison_type=oxia.ComparisonType.EQUAL)
+                self.assertEqual('alpha', key)
+                self.assertEqual(b'VALUE_007', val)
+            finally:
+                client.close()
+
+    def test_session_survives_beyond_timeout_window(self):
+        """A session_timeout_ms of 3000ms (the lowest value where the default
+        heartbeat cadence has a comfortable margin) must result in an
+        ephemeral record surviving past that window, proving the heartbeat
+        thread is actually keeping the session alive.
+
+        Note: 2000ms is the minimum accepted by the default heartbeat path,
+        but at exactly 2000ms the default resolves heartbeat_interval_ms to
+        1999ms — a 1ms margin that's fragile under any scheduling jitter.
+        This test deliberately uses 3000ms to exercise the mechanism without
+        depending on sub-millisecond timing."""
+        with OxiaContainer() as server:
+            client = oxia.Client(server.service_url(),
+                                 session_timeout_ms=3_000)
+            try:
+                k = new_key()
+                _, v = client.put(k, 'v', ephemeral=True)
+                self.assertTrue(v.is_ephemeral())
+
+                # Wait longer than the session timeout. The record must
+                # still be there — the heartbeat thread has been keeping
+                # the session alive.
+                time.sleep(4.5)
+
+                rk, rv, _ = client.get(k)
+                self.assertEqual(k, rk)
+                self.assertEqual(b'v', rv)
+            finally:
+                client.close()
+
+    def test_session_timeout_below_floor_rejected(self):
+        """A session_timeout_ms below the server's 2000ms floor must be
+        rejected. Sessions are created lazily, so the error surfaces on the
+        first ephemeral put rather than at Client construction, and it comes
+        from the server rather than from a local check."""
+        with OxiaContainer() as server:
+            client = oxia.Client(server.service_url(),
+                                 session_timeout_ms=1_999)
+            try:
+                with self.assertRaises(oxia.ex.OxiaException) as raised:
+                    client.put(new_key(), 'v', ephemeral=True)
+                self.assertIn('invalid session timeout', str(raised.exception))
+            finally:
+                # close() must work even though we never successfully created a session
+                client.close()
+
+    def test_list_empty_range_multi_shard(self):
+        """A list() with no matching keys must return [] on a multi-shard setup
+        rather than errors — regression guard for the cross-shard merge path."""
+        with OxiaContainer(shards=5) as server:
+            client = oxia.Client(server.service_url())
+            try:
+                prefix = new_key()
+                client.put(prefix + '/a', '0')
+                client.put(prefix + '/b', '1')
+                client.put(prefix + '/c', '2')
+
+                # Range that falls entirely after the written keys.
+                self.assertEqual([], client.list(prefix + '/y', prefix + '/z'))
+
+                # Range that doesn't intersect anything the test wrote.
+                self.assertEqual(
+                    [],
+                    client.list('ZZZ_nonexistent_a', 'ZZZ_nonexistent_z'))
+            finally:
+                client.close()
+
+    @unittest.expectedFailure
+    def test_list_hierarchical_sort_across_shards(self):
+        """A multi-shard list() must come back in the server's key order,
+        which the merge across shards has to reproduce.
+
+        The order is the namespace's hierarchical sorting: the keys with
+        fewer '/' first, then by their bytes with '/' ordering after any
+        other byte. It is spelled out below and cross-checked against a
+        single-shard server, where the server sorts and the client merges
+        nothing. Keys are chosen so this order and the natural one differ,
+        and the prefix is fixed so that which key lands on which shard does
+        not vary between runs.
+
+        Expected to fail against oxia-client 0.3.1. The client picks its
+        merge order from the `key_sorting` of the shard assignments and
+        falls back to its legacy order when the server reports UNKNOWN,
+        which is what the standalone server does here — so shard streams
+        that are each already sorted hierarchically get merged with the
+        legacy comparator and come out in neither order. Upstream issue; it
+        affects every cross-shard read (`list`, `range_scan` and the
+        non-EQUAL `get` comparisons).
+
+        Note: range_scan is deliberately not covered here. The server orders
+        range_scan results differently from list, which is tracked
+        separately."""
+        prefix = '/sort-check'
+        suffixes = ['/a', '/aa', '/a/b', '/a/b/c', '/aa/a', '/b', '/b/a', '/b/ab']
+
+        def hierarchical(key):
+            # '/' sorts after every other byte within one level.
+            return (key.count('/'), key.replace('/', '\xff'))
+
+        expected = sorted(suffixes, key=hierarchical)
+        self.assertNotEqual(
+            sorted(suffixes), expected,
+            "this test needs a key set where the hierarchical and the "
+            "natural orderings differ; pick different suffixes")
+
+        def list_keys(shards):
+            with OxiaContainer(shards=shards) as server:
+                client = oxia.Client(server.service_url())
+                try:
+                    for suffix in suffixes:
+                        client.put(prefix + suffix, 'v')
+                    keys = client.list(prefix + '/', prefix + '/~/~/~/~')
+                    return [k[len(prefix):] for k in keys]
+                finally:
+                    client.close()
+
+        # One shard: no merge, so this is the server's own order.
+        self.assertEqual(expected, list_keys(1))
+        # Several shards: the client merges, and must not change the order.
+        self.assertEqual(expected, list_keys(3))
+
+    def test_shard_routing_matches_go_client(self):
+        """Records must be routed to the same shard as the Go client does,
+        otherwise on a multi-shard namespace the records written by one
+        client are invisible to the other. The Go CLI shipped in the server
+        image is used as the reference."""
+        with OxiaContainer(shards=10) as server:
+            client = oxia.Client(server.service_url())
+
+            def go_client(*args):
+                exit_code, (stdout, stderr) = server.get_wrapped_container().exec_run(
+                    ['oxia', 'client', *args], demux=True)
+                self.assertEqual(0, exit_code, f"oxia client {' '.join(args)}: {stderr}")
+                return stdout.decode().rstrip('\n')
+
+            try:
+                # Written by this client, read by the Go client
+                for k in ['foo', 'bar', 'baz', '/a/b/c', 'clé']:
+                    client.put(k, 'py:' + k)
+                    self.assertEqual('py:' + k, go_client('get', k))
+
+                # Written by the Go client, read by this client
+                for k in ['qux', 'quux', '/x/y/z', 'ключ']:
+                    go_client('put', k, 'go:' + k)
+                    _, value, _ = client.get(k)
+                    self.assertEqual(('go:' + k).encode(), value)
+
+                # Routed by partition key
+                client.put('py-pk', 'py', partition_key='foo')
+                self.assertEqual('py', go_client('get', '--partition-key', 'foo', 'py-pk'))
+
+                go_client('put', '--partition-key', 'baz', 'go-pk', 'go')
+                _, value, _ = client.get('go-pk', partition_key='baz')
+                self.assertEqual(b'go', value)
+            finally:
+                client.close()
 
 
 if __name__ == '__main__':

@@ -17,9 +17,9 @@ Oxia Client SDK for Python.
 
 Usage example::
 
-    client = oxia.Client('localhost:6648', namespace='default')
-    key, version = client.put('my-key', 'my-value')
-    key, value, version = client.get('my-key')
+    with oxia.Client('localhost:6648') as client:
+        key, version = client.put('/my-key', b'my-value')
+        key, value, version = client.get('/my-key')
 """
 
 from oxia.client import (
@@ -27,11 +27,11 @@ from oxia.client import (
     Version,
     EXPECTED_RECORD_DOES_NOT_EXIST,
     ComparisonType,
-    SequenceUpdates
 )
 from oxia.defs import (
     NotificationType,
     Notification,
+    SequenceUpdates,
 )
 
 __all__ = [

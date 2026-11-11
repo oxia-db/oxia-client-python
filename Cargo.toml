@@ -30,9 +30,9 @@ crate-type = ["cdylib"]
 path = "rust/src/lib.rs"
 
 [dependencies]
-# `abi3-py313` builds one wheel per platform that every CPython from 3.13 on
+# `abi3-py310` builds one wheel per platform that every CPython from 3.10 on
 # can load, matching requires-python.
-pyo3 = { version = "0.27", features = ["abi3-py313"] }
+pyo3 = { version = "0.27", features = ["abi3-py310"] }
 # TLS is on so that a wheel can reach a TLS cluster without being rebuilt.
 # 0.3.1 is the first that sends a client identity only for ephemeral
 # records, which `Version.client_identity` is documented to do.
