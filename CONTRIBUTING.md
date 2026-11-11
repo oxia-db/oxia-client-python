@@ -26,6 +26,26 @@ If you have questions regarding Oxia, feel free to start a new discussion: https
    a clear title and description of what the feature is and why it would be
    beneficial to the project and its users.
 
+## Building
+
+The package is a Python layer over the [Oxia Rust
+client](https://github.com/oxia-db/oxia-client-rust): `src/oxia` is the public
+API and `rust/` is the PyO3 extension module it calls, built into the wheel by
+[maturin](https://www.maturin.rs/). Building it needs a Rust toolchain
+alongside [uv](https://docs.astral.sh/uv/); the tests need Docker, which they
+use to run a standalone Oxia server.
+
+```bash
+uv sync                               # build the extension and install it
+uv run pytest                         # integration tests, against a container
+uv run pydoctor --config pydoctor.ini # the API documentation
+cargo fmt && cargo clippy --all-targets
+```
+
+`uv sync` installs the package in editable mode: changes under `src/oxia` take
+effect right away, while a change under `rust/` needs another `uv sync` to be
+recompiled.
+
 ## Submitting changes
 
 <!--

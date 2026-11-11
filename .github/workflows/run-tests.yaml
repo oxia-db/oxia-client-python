@@ -30,11 +30,27 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v5
 
+    # The client itself is the Rust crate in rust/, built into the wheel by
+    # maturin, so every build step below needs a toolchain.
+    - name: Set up Rust
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        components: rustfmt, clippy
+
+    - name: Cache cargo
+      uses: Swatinem/rust-cache@v2
+
     - name: Install uv
       uses: astral-sh/setup-uv@v6
 
     - name: Install Python
       run: uv python install 3.13
+
+    - name: Check Rust formatting
+      run: cargo fmt --check
+
+    - name: Clippy
+      run: cargo clippy --all-targets -- -D warnings
 
     - name: Build distribution packages
       run: uv build

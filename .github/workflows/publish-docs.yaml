@@ -32,6 +32,13 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v5
 
+    # `uv build` below compiles the Rust crate that backs the package.
+    - name: Set up Rust
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Cache cargo
+      uses: Swatinem/rust-cache@v2
+
     - name: Install uv
       uses: astral-sh/setup-uv@v6
 

@@ -18,31 +18,29 @@ description = "Oxia client for Python"
 authors = [
     { name = "StreamNative"}
 ]
+# Taken from the version in Cargo.toml, which the release workflow sets from
+# the tag being released.
 dynamic = ["version"]
 
 requires-python = ">=3.13"
 
-dependencies = [
-    "betterproto2-compiler",
-    "grpcio",
-    "xxhash",
-]
+# The client itself is the native `oxia._oxia` module, built into the wheel.
+dependencies = []
 
 [dependency-groups]
 dev = [
-    "grpcio-tools>=1.75.1",
     "pydoctor>=25.10.1",
     "pytest>=8.4.2",
     "testcontainers>=4.13.1",
 ]
 
 [build-system]
-requires = [
-    "uv_build>=0.8.22,<0.9.0",
-    "hatchling",
-    "hatch-vcs",
-]
-build-backend = "hatchling.build"
+requires = ["maturin>=1.9,<2.0"]
+build-backend = "maturin"
 
-[tool.hatch.version]
-source = "vcs"
+[tool.maturin]
+python-source = "src"
+module-name = "oxia._oxia"
+# `extension-module` leaves libpython to the interpreter that loads the
+# module, which is what a wheel needs.
+features = ["pyo3/extension-module"]

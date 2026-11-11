@@ -17,7 +17,7 @@ Oxia Client SDK for Python.
 
 Usage example::
 
-    client = oxia.Client('oxia://localhost:6648', namespace='default')
+    client = oxia.Client('localhost:6648', namespace='default')
     key, version = client.put('my-key', 'my-value')
     key, value, version = client.get('my-key')
 """
