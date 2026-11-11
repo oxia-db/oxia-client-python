@@ -34,7 +34,9 @@ path = "rust/src/lib.rs"
 # can load, matching requires-python.
 pyo3 = { version = "0.27", features = ["abi3-py313"] }
 # TLS is on so that a wheel can reach a TLS cluster without being rebuilt.
-oxia-client = { version = "0.3", features = ["tls"] }
+# 0.3.1 is the first that sends a client identity only for ephemeral
+# records, which `Version.client_identity` is documented to do.
+oxia-client = { version = "0.3.1", features = ["tls"] }
 # The client runs on a compio runtime, on a thread of its own.
 compio = { version = "0.19.2", default-features = false, features = ["runtime", "time", "net", "io", "io-uring", "polling"] }
 futures = "0.3"

@@ -43,8 +43,9 @@ cargo fmt && cargo clippy --all-targets
 ```
 
 `uv sync` installs the package in editable mode: changes under `src/oxia` take
-effect right away, while a change under `rust/` needs another `uv sync` to be
-recompiled.
+effect right away. A change to the Rust side — `rust/`, `Cargo.toml` or
+`Cargo.lock` — has to be recompiled with `uv sync --reinstall-package oxia`,
+since a plain `uv sync` can reuse the build it has cached.
 
 ## Submitting changes
 

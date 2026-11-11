@@ -989,9 +989,9 @@ checksum = "7e036b411754132fd6b74e94b74e9a13c5cf606fa93d1885c35860d3060820b1"
 
 [[package]]
 name = "oxia-client"
-version = "0.3.0"
+version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1c9f71945cebf8a17d0698c81aa78800dce2ea971ee36510ab70574cd7af02ea"
+checksum = "c43cf06ff29b000fff5d80f699041f3d49026cac117deec81a2a448e3f953f5e"
 dependencies = [
  "bytes",
  "compio",

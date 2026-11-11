@@ -177,30 +177,9 @@ class OxiaClientTestCase(unittest.TestCase):
             self.assertEqual(vx, vr2.version_id())
             self.assertEqual(va2, b'y')
             self.assertFalse(vr2.is_ephemeral())
+            self.assertIsNone(vr2.client_identity())
 
             client2.close()
-
-    @unittest.expectedFailure
-    def test_override_ephemerals_clears_the_client_identity(self):
-        # A record overwritten by a non-ephemeral put should keep no client
-        # identity: it is documented to be set only on ephemeral records, and
-        # the Go reference client sends it only for those. The Rust client
-        # under us sends it on every put (oxia-client 0.3.0,
-        # requests.rs: `client_identity: Some(identity)` unconditionally), so
-        # the server stores one here. Expected to fail until that is fixed
-        # upstream.
-        with OxiaContainer() as server:
-            client = oxia.Client(server.service_url(), namespace="default")
-
-            kx = new_key() + "/x"
-            client.put(kx, 'x', ephemeral=True)
-            client.put(kx, 'y', ephemeral=False)
-
-            _, _, version = client.get(kx)
-            self.assertFalse(version.is_ephemeral())
-            self.assertIsNone(version.client_identity())
-
-            client.close()
 
     def test_client_identity(self):
         with OxiaContainer() as server:
