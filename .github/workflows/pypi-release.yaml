@@ -20,25 +20,91 @@ on:
       - v*
 
 jobs:
-  build_and_publish:
-    runs-on: ubuntu-latest
-    environment: pypi # Optional: use a GitHub environment for added security
-    permissions:
-      id-token: write # Required for OIDC authentication
-      contents: read # Required to checkout the repository
+  # The wheel carries a compiled extension module, so there is one per
+  # platform. They are `abi3-py313`: one wheel per platform serves every
+  # CPython from 3.13 on.
+  wheels:
+    name: ${{ matrix.target }}
+    runs-on: ${{ matrix.runner }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            runner: ubuntu-latest
+          - target: aarch64-unknown-linux-gnu
+            runner: ubuntu-24.04-arm
+          - target: x86_64-apple-darwin
+            runner: macos-latest
+          - target: aarch64-apple-darwin
+            runner: macos-latest
 
     steps:
     - name: Checkout repository
       uses: actions/checkout@v5
 
+    - name: Stamp the version from the tag
+      run: |
+        version="${GITHUB_REF#refs/tags/v}"
+        sed -i.bak -e "0,/^version = /s//version = \"${version}\"/" Cargo.toml
+        rm Cargo.toml.bak
+        grep -m1 '^version = ' Cargo.toml
+
+    - name: Build wheel
+      uses: PyO3/maturin-action@v1
+      with:
+        target: ${{ matrix.target }}
+        manylinux: auto
+        args: --release --out dist
+
+    - name: Upload wheel
+      uses: actions/upload-artifact@v4
+      with:
+        name: wheel-${{ matrix.target }}
+        path: dist
+
+  sdist:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v5
+
+    - name: Stamp the version from the tag
+      run: |
+        version="${GITHUB_REF#refs/tags/v}"
+        sed -i.bak -e "0,/^version = /s//version = \"${version}\"/" Cargo.toml
+        rm Cargo.toml.bak
+
+    - name: Build sdist
+      uses: PyO3/maturin-action@v1
+      with:
+        command: sdist
+        args: --out dist
+
+    - name: Upload sdist
+      uses: actions/upload-artifact@v4
+      with:
+        name: sdist
+        path: dist
+
+  publish:
+    needs: [wheels, sdist]
+    runs-on: ubuntu-latest
+    environment: pypi # Optional: use a GitHub environment for added security
+    permissions:
+      id-token: write # Required for OIDC authentication
+
+    steps:
+    - name: Collect the artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: dist
+        merge-multiple: true
+
     - name: Install uv
       uses: astral-sh/setup-uv@v6
 
-    - name: Install Python
-      run: uv python install 3.13
-
-    - name: Build distribution packages
-      run: uv build
-
-    - name: Publish package to PyPI
-      run: uv publish
+    - name: Publish packages to PyPI
+      run: uv publish dist/*

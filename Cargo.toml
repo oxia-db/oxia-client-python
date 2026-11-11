@@ -1,0 +1,47 @@
+# Copyright 2025 The Oxia Authors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+[package]
+name = "oxia-python"
+version = "0.0.0"
+edition = "2024"
+rust-version = "1.99"
+description = "PyO3 bindings over the Oxia Rust client, built into the `oxia` Python wheel."
+license = "Apache-2.0"
+repository = "https://github.com/oxia-db/oxia-client-python"
+publish = false
+
+[lib]
+# Imported from Python as `oxia._oxia`; the `oxia` package itself is the
+# Python layer in src/oxia, which this module only backs.
+name = "_oxia"
+crate-type = ["cdylib"]
+path = "rust/src/lib.rs"
+
+[dependencies]
+# `abi3-py310` builds one wheel per platform that every CPython from 3.10 on
+# can load, matching requires-python.
+pyo3 = { version = "0.27", features = ["abi3-py310"] }
+# TLS is on so that a wheel can reach a TLS cluster without being rebuilt.
+# 0.3.1 is the first that sends a client identity only for ephemeral
+# records, which `Version.client_identity` is documented to do.
+oxia-client = { version = "0.3.1", features = ["tls"] }
+# The client runs on a compio runtime, on a thread of its own.
+compio = { version = "0.19.2", default-features = false, features = ["runtime", "time", "net", "io", "io-uring", "polling"] }
+futures = "0.3"
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true

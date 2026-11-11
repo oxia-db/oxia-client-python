@@ -23,6 +23,28 @@ on:
       - main
 
 jobs:
+  rust:
+    name: Rust lints
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v5
+
+    - name: Set up Rust
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        components: rustfmt, clippy
+
+    - name: Cache cargo
+      uses: Swatinem/rust-cache@v2
+
+    - name: Check formatting
+      run: cargo fmt --check
+
+    - name: Clippy
+      run: cargo clippy --all-targets -- -D warnings
+
   build_and_test:
     runs-on: ubuntu-latest
     strategy:
@@ -33,6 +55,14 @@ jobs:
     steps:
     - name: Checkout repository
       uses: actions/checkout@v5
+
+    # The client itself is the Rust crate in rust/, built into the wheel by
+    # maturin, so the build steps below need a toolchain.
+    - name: Set up Rust
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Cache cargo
+      uses: Swatinem/rust-cache@v2
 
     - name: Install uv
       uses: astral-sh/setup-uv@v6

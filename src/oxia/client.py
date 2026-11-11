@@ -11,22 +11,32 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import functools
-import heapq
 
-from oxia.internal.compare import compare_tuple_with_slash, compare_with_slash
-from oxia.internal.connection_pool import ConnectionPool
-from oxia.internal.notifications import Notifications
-from oxia.internal.sequence_updates import SequenceUpdatesImpl
-from oxia.internal.sessions import SessionManager
-from oxia.internal.service_discovery import ServiceDiscovery
-from oxia.internal.proto.io.streamnative.oxia import proto as pb
-import oxia.ex
-import oxia.defs
+"""The public API, over the native client in ``oxia._oxia``.
+
+The native module does the work — connections, shard routing, sessions,
+batching, retries — and speaks in plain tuples. This module is what users
+import: it holds the documented signatures, the option checks, and the
+classes those tuples are turned back into.
+"""
+
+# Annotations are not evaluated at runtime. `Client.list` shadows the builtin
+# inside the class body, so a `list[int]` annotation on a sibling method would
+# otherwise resolve to the method under PEP 649 and break `inspect.signature`.
+from __future__ import annotations
 
 import datetime
 import enum
 from typing import Iterator
+
+from oxia import _oxia
+from oxia.defs import Notification, NotificationType, SequenceUpdates
+import oxia.ex
+
+# `get_sequence_updates` returns the native iterator directly. Registering it
+# makes it a virtual subclass of the documented ABC, so the type contract
+# holds without a wrapper in front of every item.
+SequenceUpdates.register(_oxia.SequenceUpdatesIterator)
 
 
 def _coerce_value(value) -> bytes:
@@ -45,46 +55,14 @@ def _coerce_value(value) -> bytes:
             f"value must be str or bytes, got {type(value).__name__}")
 
 
-def _check_status(status: pb.Status):
-    """Translate a protobuf response status into a Python exception.
-
-    @param status: the status from an Oxia RPC response.
-    @raises oxia.ex.KeyNotFound: if the key was not found.
-    @raises oxia.ex.UnexpectedVersionId: if the version did not match.
-    @raises oxia.ex.SessionNotFound: if the session does not exist.
-    @raises oxia.ex.OxiaException: for any unrecognised status.
-    """
-    if status == pb.Status.OK:
-        pass
-    elif status == pb.Status.KEY_NOT_FOUND:
-        raise oxia.ex.KeyNotFound()
-    elif status == pb.Status.UNEXPECTED_VERSION_ID:
-        raise oxia.ex.UnexpectedVersionId()
-    elif status == pb.Status.SESSION_DOES_NOT_EXIST:
-        raise oxia.ex.SessionNotFound()
-    else:
-        raise oxia.ex.OxiaException(f"unknown status: {status}")
-
-
 class ComparisonType(enum.IntEnum):
     """Key comparison mode for the L{Client.get} operation."""
 
-    EQUAL = int(pb.KeyComparisonType.EQUAL)      #: Exact match on the key.
-    FLOOR = int(pb.KeyComparisonType.FLOOR)      #: Highest key <= the supplied key.
-    CEILING = int(pb.KeyComparisonType.CEILING)  #: Lowest key >= the supplied key.
-    LOWER = int(pb.KeyComparisonType.LOWER)      #: Highest key strictly < the supplied key.
-    HIGHER = int(pb.KeyComparisonType.HIGHER)    #: Lowest key strictly > the supplied key.
-
-
-def _get_version(pbv: pb.Version):
-    v = Version()
-    v._version_id = pbv.version_id
-    v._modifications_count = pbv.modifications_count
-    v._created_timestamp = datetime.datetime.fromtimestamp(pbv.created_timestamp / 1000.0)
-    v._modified_timestamp = datetime.datetime.fromtimestamp(pbv.modified_timestamp / 1000.0)
-    v._session_id = pbv.session_id
-    v._client_identity = pbv.client_identity
-    return v
+    EQUAL = 0    #: Exact match on the key.
+    FLOOR = 1    #: Highest key <= the supplied key.
+    CEILING = 2  #: Lowest key >= the supplied key.
+    LOWER = 3    #: Highest key strictly < the supplied key.
+    HIGHER = 4   #: Lowest key strictly > the supplied key.
 
 
 class Version:
@@ -133,9 +111,54 @@ class Version:
                 f"client_identity={self.client_identity()!r})")
 
 
+def _version(v) -> Version:
+    """Rebuild a L{Version} from the tuple the native client returns."""
+    version = Version()
+    (version._version_id,
+     version._modifications_count,
+     created_timestamp,
+     modified_timestamp,
+     version._session_id,
+     version._client_identity) = v
+    version._created_timestamp = datetime.datetime.fromtimestamp(created_timestamp / 1000.0)
+    version._modified_timestamp = datetime.datetime.fromtimestamp(modified_timestamp / 1000.0)
+    return version
+
+
+def _record(r) -> tuple[str, bytes, Version]:
+    key, value, version = r
+    return key, value, _version(version)
+
+
+def _notification(n) -> Notification:
+    notification = Notification()
+    (notification_type, notification._key,
+     notification._version_id, notification._key_range_end) = n
+    notification._type = NotificationType(notification_type)
+    return notification
+
+
 EXPECTED_RECORD_DOES_NOT_EXIST = -1
 """Pass as ``expected_version_id`` to L{Client.put} to assert the record
 does not already exist."""
+
+
+class _Mapped:
+    """An iterator over a native one, converting each item as it comes."""
+
+    def __init__(self, inner, convert):
+        self._inner = inner
+        self._convert = convert
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        return self._convert(next(self._inner))
+
+    def close(self):
+        """Close the subscription and release resources."""
+        self._inner.close()
 
 
 class Client:
@@ -155,23 +178,27 @@ class Client:
                  ):
         """Create a new Oxia client.
 
+        Connects to the service, discovers the shards of the namespace and
+        starts the thread the client runs on. The client is thread-safe:
+        operations submitted from several threads run concurrently and are
+        batched together.
+
         @param service_address: Oxia service address (``host:port``).
         @param namespace: Oxia namespace. Default is ``"default"``.
         @param session_timeout_ms: Session timeout in milliseconds for
             ephemeral records. Default is 30 000 ms.
         @param client_identifier: Optional client identity string. If
             ``None``, a random UUID is generated.
-        @param request_timeout_ms: Deadline for each unary/finite RPC
+        @param request_timeout_ms: Deadline for each finite operation
             (``put``, ``delete``, ``get``, ``list``, ``range_scan``,
-            session management). Long-lived streams (notifications,
-            sequence updates, shard assignments) are not bounded.
-            Default is 30 000 ms. A ``grpc.RpcError`` with
-            ``StatusCode.DEADLINE_EXCEEDED`` is raised on timeout.
+            session management), including the retries the client makes
+            internally. Long-lived subscriptions (notifications, sequence
+            updates, shard assignments) are not bounded. Default is
+            30 000 ms. A timeout is raised as L{oxia.ex.OxiaException}.
         """
-        self._closed = False
-        self._connections = ConnectionPool(request_timeout_ms=request_timeout_ms)
-        self._service_discovery = ServiceDiscovery(service_address, self._connections, namespace)
-        self._session_manager = SessionManager(self._service_discovery, session_timeout_ms, client_identifier)
+        self._client = _oxia.Client(service_address, namespace,
+                                    session_timeout_ms, request_timeout_ms,
+                                    client_identifier)
 
     def put(self, key: str, value: str | bytes,
             partition_key: str = None,
@@ -202,40 +229,20 @@ class Client:
         @raises oxia.ex.SessionNotFound: if the session for an ephemeral
             put no longer exists on the server.
         """
-        shard, stub = self._service_discovery.get_leader(key, partition_key)
-
         if sequence_keys_deltas:
             if not partition_key:
                 raise oxia.ex.InvalidOptions("sequence_keys_deltas can only be used with partition_key")
             if expected_version_id is not None:
                 raise oxia.ex.InvalidOptions("sequence_keys_deltas cannot be used with expected_version_id")
 
-        value = _coerce_value(value)
-
-        pr = pb.PutRequest(key=key, value=value,
-                           partition_key=partition_key,
-                           expected_version_id=expected_version_id,
-                           sequence_key_delta=sequence_keys_deltas,
-                           )
-        if ephemeral:
-            session = self._session_manager.get_session(shard)
-            pr.session_id = session.session_id()
-            pr.client_identity = session.client_identifier()
-
-        if secondary_indexes:
-            indexes = []
-            for k, v in secondary_indexes.items():
-                indexes.append(pb.SecondaryIndex(k, v))
-            pr.secondary_indexes = indexes
-
-        res = stub.write(pb.WriteRequest(shard=shard, puts=[pr]))
-
-        put_res = res.puts[0]  # We only have 1 request
-        _check_status(put_res.status)
-
-        if put_res.key:
-            key = put_res.key
-        return key, _get_version(put_res.version)
+        key, version = self._client.put(key, _coerce_value(value),
+                                        partition_key=partition_key,
+                                        expected_version_id=expected_version_id,
+                                        ephemeral=ephemeral,
+                                        sequence_keys_deltas=sequence_keys_deltas,
+                                        secondary_indexes=list(secondary_indexes.items())
+                                        if secondary_indexes else None)
+        return key, _version(version)
 
     def delete(self, key: str,
                partition_key: str = None,
@@ -249,18 +256,9 @@ class Client:
             ``False`` if the key was not found.
         @raises oxia.ex.UnexpectedVersionId: if the version check fails.
         """
-        shard, stub = self._service_discovery.get_leader(key, partition_key)
-
-        dr = pb.DeleteRequest(key=key,
-                              expected_version_id=expected_version_id)
-        res = stub.write(pb.WriteRequest(shard=shard, deletes=[dr]))
-
-        status = res.deletes[0].status  # We only have 1 request
-        if status == pb.Status.KEY_NOT_FOUND:
-            return False
-        else:
-            _check_status(status)
-            return True
+        return self._client.delete(key,
+                                   partition_key=partition_key,
+                                   expected_version_id=expected_version_id)
 
     def delete_range(self, min_key_inclusive: str, max_key_exclusive: str, partition_key: str = None):
         """Delete all records whose keys fall within ``[min, max)``.
@@ -273,21 +271,8 @@ class Client:
         @param partition_key: If set, only the shard owning this
             partition key is affected.
         """
-        if partition_key is None:
-            for shard, stub in self._service_discovery.get_all_shards():
-                self._delete_range_single_shard(min_key_inclusive, max_key_exclusive, shard, stub)
-        else:
-            shard, stub = self._service_discovery.get_leader(partition_key, partition_key)
-            self._delete_range_single_shard(min_key_inclusive, max_key_exclusive, shard, stub)
-
-    @staticmethod
-    def _delete_range_single_shard(min_key_inclusive: str, max_key_exclusive: str, shard: int, stub):
-        dr = pb.DeleteRangeRequest(start_inclusive=min_key_inclusive,
-                                   end_exclusive=max_key_exclusive)
-        res = stub.write(pb.WriteRequest(shard=shard, delete_ranges=[dr]))
-
-        status = res.delete_ranges[0].status  # We only have 1 request
-        _check_status(status)
+        self._client.delete_range(min_key_inclusive, max_key_exclusive,
+                                  partition_key=partition_key)
 
     def get(self, key: str,
             partition_key: str = None,
@@ -311,50 +296,11 @@ class Client:
             ``None`` if *include_value* is ``False``).
         @raises oxia.ex.KeyNotFound: if no matching record exists.
         """
-        if partition_key is None and \
-                (comparison_type != ComparisonType.EQUAL
-                 or use_index is not None):
-
-            results = []
-            for shard, stub in self._service_discovery.get_all_shards():
-                try:
-                    k, val, version = self._get_single_shard(shard, stub, key, comparison_type, include_value, use_index)
-                    results.append((k, val, version))
-                except oxia.ex.KeyNotFound:
-                    pass
-            if not results:
-                raise oxia.ex.KeyNotFound()
-            results.sort(key=functools.cmp_to_key(compare_tuple_with_slash))
-
-            if comparison_type == ComparisonType.EQUAL or \
-                comparison_type == ComparisonType.CEILING or \
-                comparison_type == ComparisonType.HIGHER:
-                return results[0]
-            elif comparison_type == ComparisonType.FLOOR or \
-                    comparison_type == ComparisonType.LOWER:
-                return results[-1]
-
-        else:
-            # Single shard get operation
-            shard, stub = self._service_discovery.get_leader(key, partition_key)
-            return self._get_single_shard(shard, stub, key, comparison_type, include_value, use_index)
-
-    @staticmethod
-    def _get_single_shard(shard: int, stub,
-                          key: str,
-                          comparison_type: ComparisonType,
-                          include_value: bool,
-                          use_index: str) -> tuple[str, bytes, Version]:
-        gr = pb.GetRequest(key=key,
-                           comparison_type=comparison_type,
-                           include_value=include_value,
-                           secondary_index_name=use_index)
-        res = next(stub.read(pb.ReadRequest(shard=shard, gets=[gr])))
-        get_res = res.gets[0]  # We only have 1 request
-        _check_status(get_res.status)
-
-        res_key = get_res.key if get_res.key is not None else key
-        return res_key, get_res.value, _get_version(get_res.version)
+        return _record(self._client.get(key,
+                                        partition_key=partition_key,
+                                        comparison_type=int(comparison_type),
+                                        include_value=include_value,
+                                        use_index=use_index))
 
     def list(self, min_key_inclusive: str, max_key_exclusive: str,
              partition_key: str = None,
@@ -372,27 +318,9 @@ class Client:
         @param use_index: Name of a secondary index to query.
         @return: Sorted list of keys in the range, or ``[]`` if none.
         """
-        if partition_key is None:
-            all_res = []
-            for shard, stub in self._service_discovery.get_all_shards():
-                all_res.extend(self._list_single_shard(shard, stub, min_key_inclusive, max_key_exclusive, use_index))
-            all_res.sort(key=functools.cmp_to_key(compare_with_slash))
-            return all_res
-        else:
-            shard, stub = self._service_discovery.get_leader(partition_key, partition_key)
-            return self._list_single_shard(shard, stub, min_key_inclusive, max_key_exclusive, use_index)
-
-    @staticmethod
-    def _list_single_shard(shard, stub, min_key_inclusive: str, max_key_exclusive: str, use_index: str) -> list:
-        res = stub.list(pb.ListRequest(shard=shard,
-                                       start_inclusive=min_key_inclusive,
-                                       end_exclusive=max_key_exclusive,
-                                       secondary_index_name=use_index))
-
-        keys = []
-        for i in res:
-            keys.extend(i.keys)
-        return keys
+        return self._client.list(min_key_inclusive, max_key_exclusive,
+                                 partition_key=partition_key,
+                                 use_index=use_index)
 
     def range_scan(self,
                    min_key_inclusive: str,
@@ -415,28 +343,12 @@ class Client:
         @param use_index: Name of a secondary index to query.
         @return: An iterator of ``(key, value, version)`` tuples.
         """
-        if partition_key is None:
-            its = []
-            for shard, stub in self._service_discovery.get_all_shards():
-                its.append(self._range_scan_single_shard(shard, stub, min_key_inclusive, max_key_exclusive, use_index))
-            return heapq.merge(*its, key=functools.cmp_to_key(compare_tuple_with_slash))
-        else:
-            shard, stub = self._service_discovery.get_leader(partition_key, partition_key)
-            return self._range_scan_single_shard(shard, stub, min_key_inclusive, max_key_exclusive, use_index)
+        return _Mapped(self._client.range_scan(min_key_inclusive, max_key_exclusive,
+                                               partition_key=partition_key,
+                                               use_index=use_index),
+                       _record)
 
-    @staticmethod
-    def _range_scan_single_shard(shard, stub, min_key_inclusive: str, max_key_exclusive: str, use_index: str) \
-                            -> Iterator[tuple[str, bytes, Version]]:
-        it = stub.range_scan(pb.RangeScanRequest(shard=shard,
-                            start_inclusive=min_key_inclusive,
-                            end_exclusive=max_key_exclusive,
-                            secondary_index_name=use_index))
-
-        for res in it:
-            for x in res.records:
-                yield x.key, x.value, _get_version(x.version)
-
-    def get_sequence_updates(self, prefix_key: str, partition_key: str = None) -> oxia.defs.SequenceUpdates:
+    def get_sequence_updates(self, prefix_key: str, partition_key: str = None) -> SequenceUpdates:
         """Subscribe to updates on a sequential key.
 
         Returns an iterator that yields the latest key each time the
@@ -451,25 +363,23 @@ class Client:
         """
         if partition_key is None:
             raise oxia.ex.InvalidOptions("get_sequence_updates requires a partition_key")
-        return SequenceUpdatesImpl(self._service_discovery, prefix_key, partition_key, lambda: self._closed)
+        return self._client.sequence_updates(prefix_key, partition_key)
 
-    def get_notifications(self) -> Iterator[oxia.defs.Notification]:
+    def get_notifications(self) -> Iterator[Notification]:
         """Subscribe to change notifications for the entire database.
 
         Returns an iterator that yields L{Notification} objects for
         every create, modify, delete, or range-delete event. Multiple
-        subscriptions can be active simultaneously.
+        subscriptions can be active simultaneously. Call ``.close()`` on
+        the returned object when done.
 
         @return: An iterator of L{Notification} objects.
         """
-        return Notifications(self._service_discovery)
+        return _Mapped(self._client.notifications(), _notification)
 
     def close(self):
         """Close the client and release all underlying connections."""
-        self._closed = True
-        self._session_manager.close()
-        self._connections.close()
-        self._service_discovery.close()
+        self._client.close()
 
     def __enter__(self):
         return self

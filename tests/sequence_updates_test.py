@@ -14,14 +14,13 @@
 
 """Unit tests for the SequenceUpdates type contract."""
 
+from oxia import _oxia
 from oxia.defs import SequenceUpdates
-from oxia.internal.sequence_updates import SequenceUpdatesImpl
 
 
-def test_sequence_updates_impl_is_a_sequence_updates():
-    """SequenceUpdatesImpl must be a subclass of the SequenceUpdates ABC.
+def test_sequence_updates_iterator_is_a_sequence_updates():
+    """What get_sequence_updates() returns must satisfy the documented ABC.
 
-    Currently FAILS because SequenceUpdatesImpl is an unrelated class
-    that doesn't inherit from SequenceUpdates."""
-    assert issubclass(SequenceUpdatesImpl, SequenceUpdates), \
-        "SequenceUpdatesImpl should inherit from SequenceUpdates"
+    The iterator is the native type, which cannot inherit from a Python
+    class, so oxia.client registers it as a virtual subclass instead."""
+    assert issubclass(_oxia.SequenceUpdatesIterator, SequenceUpdates)

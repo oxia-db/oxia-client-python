@@ -32,33 +32,45 @@ Requirements:
 
 * Python 3.10+
 * [uv](https://docs.astral.sh/uv/) (package manager)
+* A Rust toolchain, to build the extension module
 * Docker (for integration tests via testcontainers)
 
-Install dependencies:
+The package is a Python layer over the [Oxia Rust
+client](https://github.com/oxia-db/oxia-client-rust): `src/oxia` is the public
+API and `rust/` is the PyO3 extension module it calls, built into the wheel by
+[maturin](https://www.maturin.rs/).
+
+Build the extension and install everything:
 
 ```bash
 uv sync
 ```
 
+`uv sync` installs the package in editable mode: changes under `src/oxia` take
+effect right away. A change to the Rust side — `rust/`, `Cargo.toml` or
+`Cargo.lock` — has to be recompiled with `uv sync --reinstall-package oxia`,
+since a plain `uv sync` can reuse the build it has cached.
+
 ## Running tests
 
-```bash
-# All tests (unit + integration — requires Docker)
-uv run pytest
+The suite is integration-level: every test runs against a standalone Oxia
+server in a container, so Docker has to be running.
 
-# Unit tests only (no Docker needed)
-uv run pytest tests/compare_test.py tests/sessions_test.py
+```bash
+# The whole suite
+uv run pytest
 
 # With coverage
 uv run pytest --cov --cov-report=term-missing
+
+# The Rust side
+cargo fmt --check && cargo clippy --all-targets -- -D warnings
 ```
 
-## Regenerating protobuf bindings
-
-If the Oxia proto definitions change:
+## Building the documentation
 
 ```bash
-./gen-proto.sh
+uv run pydoctor --config pydoctor.ini
 ```
 
 ## Submitting changes

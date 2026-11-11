@@ -16,6 +16,9 @@ system for large-scale distributed systems.
 ## Requirements
 
 * Python 3.10+
+* Linux (x86\_64, aarch64) or macOS (x86\_64, aarch64), for which wheels are
+  published. On any other platform, pip builds from the source distribution,
+  which needs a Rust toolchain.
 
 ## Installation
 
@@ -59,6 +62,16 @@ with oxia.Client('localhost:6648') as client:
 - **Floor/Ceiling/Lower/Higher lookups**: nearest-key queries
 
 For the full API reference, see the [documentation](https://oxia-db.github.io/oxia-client-python/latest/).
+
+## How it works
+
+This SDK is a binding over the [Oxia Rust
+client](https://github.com/oxia-db/oxia-client-rust), through
+[PyO3](https://pyo3.rs/): the wheel carries that client compiled in, and the
+Python package is the API over it, so the protocol itself lives in one place
+across the SDKs. The client runs on a thread of its own; operations from
+several Python threads run concurrently and batch together, and calls release
+the GIL while they wait.
 
 ## Contributing
 

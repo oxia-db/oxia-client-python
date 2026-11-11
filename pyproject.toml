@@ -20,6 +20,8 @@ license = {text = "Apache-2.0"}
 authors = [
     { name = "The Oxia Authors"}
 ]
+# Taken from the version in Cargo.toml, which the release workflow sets from
+# the tag being released.
 dynamic = ["version"]
 
 requires-python = ">=3.10"
@@ -38,13 +40,8 @@ classifiers = [
     "Topic :: System :: Distributed Computing",
 ]
 
-dependencies = [
-    # Generated stubs call betterproto2.check_compiler_version(), which requires
-    # the runtime major.minor to match the betterproto2-compiler that produced them.
-    "betterproto2>=0.9.0,<0.10",
-    "grpcio",
-    "xxhash",
-]
+# The client itself is the native `oxia._oxia` module, built into the wheel.
+dependencies = []
 
 [project.urls]
 Homepage = "https://oxia-db.github.io/"
@@ -54,8 +51,6 @@ Issues = "https://github.com/oxia-db/oxia-client-python/issues"
 
 [dependency-groups]
 dev = [
-    "betterproto2-compiler>=0.9.0",
-    "grpcio-tools>=1.75.1",
     "pydoctor>=25.10.1",
     "pytest>=8.4.2",
     "pytest-cov>=7.1.0",
@@ -63,24 +58,23 @@ dev = [
 ]
 
 [build-system]
-requires = [
-    "uv_build>=0.8.22,<0.9.0",
-    "hatchling",
-    "hatch-vcs",
-]
-build-backend = "hatchling.build"
+requires = ["maturin>=1.9,<2.0"]
+build-backend = "maturin"
+
+[tool.maturin]
+python-source = "src"
+module-name = "oxia._oxia"
+# `extension-module` leaves libpython to the interpreter that loads the
+# module, which is what a wheel needs.
+features = ["pyo3/extension-module"]
 
 [tool.pytest.ini_options]
 filterwarnings = [
     "ignore:The @wait_container_is_ready decorator is deprecated:DeprecationWarning",
 ]
 
-[tool.hatch.version]
-source = "vcs"
-
 [tool.coverage.run]
 source = ["oxia"]
-omit = ["src/oxia/internal/proto/*"]
 
 [tool.coverage.report]
 show_missing = true
