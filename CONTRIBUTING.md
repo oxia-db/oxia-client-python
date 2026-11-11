@@ -56,7 +56,15 @@ since a plain `uv sync` can reuse the build it has cached.
 The suite is integration-level: every test runs against a standalone Oxia
 server in a container, so Docker has to be running.
 
+The image is `oxia/oxia:nightly-beta`, rather than `latest`: a client can
+only merge a read across shards correctly against a server that reports its
+key sorting, which releases before v0.18.0 do not. testcontainers reuses
+whatever is already tagged locally and never re-pulls, so refresh it
+yourself — a stale image does not announce itself.
+
 ```bash
+docker pull oxia/oxia:nightly-beta
+
 # The whole suite
 uv run pytest
 

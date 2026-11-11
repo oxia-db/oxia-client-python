@@ -73,6 +73,11 @@ jobs:
     - name: Build distribution packages
       run: uv build -p ${{ matrix.python-version }}
 
+    # testcontainers reuses whatever is already tagged locally and never
+    # re-pulls, so the image is refreshed explicitly before the tests.
+    - name: Pull the Oxia test image
+      run: docker pull oxia/oxia:nightly-beta
+
     - name: Run tests with coverage
       run: uv run -p ${{ matrix.python-version }} pytest --cov --cov-report=term-missing --cov-report=xml
 

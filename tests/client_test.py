@@ -878,7 +878,6 @@ class OxiaClientTestCase(unittest.TestCase):
             finally:
                 client.close()
 
-    @unittest.expectedFailure
     def test_list_hierarchical_sort_across_shards(self):
         """A multi-shard list() must come back in the server's key order,
         which the merge across shards has to reproduce.
@@ -891,14 +890,14 @@ class OxiaClientTestCase(unittest.TestCase):
         and the prefix is fixed so that which key lands on which shard does
         not vary between runs.
 
-        Expected to fail against oxia-client 0.3.1. The client picks its
-        merge order from the `key_sorting` of the shard assignments and
-        falls back to its legacy order when the server reports UNKNOWN,
-        which is what the standalone server does here — so shard streams
-        that are each already sorted hierarchically get merged with the
-        legacy comparator and come out in neither order. Upstream issue; it
-        affects every cross-shard read (`list`, `range_scan` and the
-        non-EQUAL `get` comparisons).
+        This only holds against a server that reports its key sorting in
+        the shard assignments, which is why the suite pins the nightly
+        image (see tests/oxia_container.py). Servers between v0.15.0 and
+        v0.17.1 — `oxia/oxia:latest` among them — sort hierarchically but
+        report nothing, and may equally have been started with natural
+        sorting, so a client cannot tell which to merge in. Both the Rust
+        and the Go clients fall back to the pre-v0.15 order there and
+        return the same wrong result.
 
         Note: range_scan is deliberately not covered here. The server orders
         range_scan results differently from list, which is tracked
