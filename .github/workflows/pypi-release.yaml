@@ -21,8 +21,8 @@ on:
 
 jobs:
   # The wheel carries a compiled extension module, so there is one per
-  # platform. They are `abi3-py313`: one wheel per platform serves every
-  # CPython from 3.13 on.
+  # platform. They are `abi3-py310`: one wheel per platform serves every
+  # CPython from 3.10 on.
   wheels:
     name: ${{ matrix.target }}
     runs-on: ${{ matrix.runner }}
@@ -45,11 +45,7 @@ jobs:
       uses: actions/checkout@v5
 
     - name: Stamp the version from the tag
-      run: |
-        version="${GITHUB_REF#refs/tags/v}"
-        sed -i.bak -e "0,/^version = /s//version = \"${version}\"/" Cargo.toml
-        rm Cargo.toml.bak
-        grep -m1 '^version = ' Cargo.toml
+      run: ./.github/stamp-version.sh "${GITHUB_REF#refs/tags/v}"
 
     - name: Build wheel
       uses: PyO3/maturin-action@v1
@@ -72,10 +68,7 @@ jobs:
       uses: actions/checkout@v5
 
     - name: Stamp the version from the tag
-      run: |
-        version="${GITHUB_REF#refs/tags/v}"
-        sed -i.bak -e "0,/^version = /s//version = \"${version}\"/" Cargo.toml
-        rm Cargo.toml.bak
+      run: ./.github/stamp-version.sh "${GITHUB_REF#refs/tags/v}"
 
     - name: Build sdist
       uses: PyO3/maturin-action@v1
@@ -102,6 +95,26 @@ jobs:
       with:
         path: dist
         merge-multiple: true
+
+    # The build is what sets the version, from a file this workflow
+    # rewrote. If that ever stops working, the artifacts are wrong rather
+    # than missing, and an upload to PyPI cannot be taken back — so check
+    # the names before publishing rather than after.
+    - name: Check the artifacts carry the tag's version
+      run: |
+        version="${GITHUB_REF#refs/tags/v}"
+        ls -1 dist/
+        found=0
+        for artifact in dist/*; do
+          case "$(basename "$artifact")" in
+            "oxia-${version}-"*.whl|"oxia-${version}.tar.gz") found=$((found + 1)) ;;
+            *) echo "::error::$(basename "$artifact") is not version ${version}"; exit 1 ;;
+          esac
+        done
+        if [ "$found" -lt 2 ]; then
+          echo "::error::expected the wheels and the sdist, found ${found} artifacts"
+          exit 1
+        fi
 
     - name: Install uv
       uses: astral-sh/setup-uv@v6
