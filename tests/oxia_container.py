@@ -15,10 +15,20 @@
 from testcontainers.core.container import DockerContainer
 from testcontainers.core.wait_strategies import LogMessageWaitStrategy
 
+# `latest` is v0.16.13, which sorts keys hierarchically but does not report
+# its key sorting in the shard assignments — the field was only added in
+# v0.18.0. A client cannot know how to merge a read across shards against
+# such a server, so the suite runs against the nightly instead, which does
+# report it. Note that testcontainers reuses whatever is already tagged
+# locally: `docker pull oxia/oxia:nightly-beta` before running the tests, as
+# CI does, or the image goes stale without saying so.
+OXIA_IMAGE = 'oxia/oxia:nightly-beta'
+
+
 class OxiaContainer(DockerContainer):
     def __init__(self, shards=1):
         super().__init__(
-            image='oxia/oxia:latest',
+            image=OXIA_IMAGE,
             command=f"oxia standalone --shards={shards}",
             ports=[6648,]
         )
