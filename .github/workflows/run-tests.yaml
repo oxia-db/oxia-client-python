@@ -90,4 +90,4 @@ jobs:
 
     - name: Verify documentation
       if: matrix.python-version == '3.13'
-      run: uv run -p ${{ matrix.python-version }} pydoctor --config pydoctor.ini
+      run: uv run -p ${{ matrix.python-version }} --group docs pydoctor --config pydoctor.ini

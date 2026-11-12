@@ -51,11 +51,19 @@ Issues = "https://github.com/oxia-db/oxia-client-python/issues"
 
 [dependency-groups]
 dev = [
-    "pydoctor>=25.10.1",
     "pytest>=8.4.2",
     "pytest-cov>=7.1.0",
     "testcontainers>=4.13.1",
 ]
+docs = [
+    "pydoctor>=25.10.1",
+]
+
+# pydoctor pulls in cachecontrol[filecache] -> filelock, whose patched releases
+# require Python 3.11+. Docs are only ever built on 3.13, so pinning the group
+# keeps the 3.10 resolution free of the unpatchable filelock 4.1.0.
+[tool.uv.dependency-groups]
+docs = { requires-python = ">=3.13" }
 
 [build-system]
 requires = ["maturin>=1.9,<2.0"]
